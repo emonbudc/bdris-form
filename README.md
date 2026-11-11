@@ -51,6 +51,12 @@ define('FF_CACHE', __DIR__ . '/cache/');
 4. Submit the application.
 5. Save or print the local acknowledgement page.
 
+## Single-word names
+
+BDRIS splits the child's name into first and last parts. For a one-word name, leave the first-name field empty and put the full name in the last-name field. The form joins the parts with a space, so the submitted full name stays exactly the one word. The same rule applies to the father's and mother's names.
+
+For a multi-word name, put everything except the last word in the first-name field and the last word in the last-name field. Example: `মোছাঃ সুরাইয়া আকতার` → first part `মোছাঃ সুরাইয়া`, last part `আকতার`.
+
 ## Notes
 
 - The cache directory stores session state and upstream cookies. Keep it outside the public web root or deny direct HTTP access to it.

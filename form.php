@@ -873,8 +873,8 @@ function ff_action_submit(string $sid, array $state): array
     $applicantNid = preg_replace('/\D+/', '', ff_digits(ff_post('applicantNotParentsNid'))) ?? '';
 
     $errors = [];
-    if ($firstBn === '' || $lastBn === '' || $firstEn === '' || $lastEn === '') {
-        $errors[] = 'শিশুর নাম (বাংলা ও ইংরেজি) সম্পূর্ণ দিন';
+    if ($lastBn === '' || $lastEn === '') {
+        $errors[] = 'শিশুর নাম (বাংলা ও ইংরেজি) দিন — এক শব্দের নাম হলে শুধু শেষ অংশে লিখুন';
     }
     if ($dob === '') {
         $errors[] = 'জন্ম তারিখ DD/MM/YYYY আকারে দিন';
@@ -888,11 +888,11 @@ function ff_action_submit(string $sid, array $state): array
     if ($fatherFullBn === '' || $fatherFullEn === '' || $motherFullBn === '' || $motherFullEn === '') {
         $errors[] = 'পিতা ও মাতার নাম (বাংলা ও ইংরেজি) দিন';
     }
-    if ($fatherFirstBn === '' || $fatherLastBn === '' || $motherFirstBn === '' || $motherLastBn === '') {
-        $errors[] = 'পিতা ও মাতার নামের প্রথম ও শেষ অংশ বাংলায় দিন';
+    if ($fatherLastBn === '' || $motherLastBn === '') {
+        $errors[] = 'পিতা ও মাতার নাম বাংলায় দিন — এক শব্দের নাম হলে শুধু শেষ অংশে লিখুন';
     }
-    if ($fatherFirstEn === '' || $fatherLastEn === '' || $motherFirstEn === '' || $motherLastEn === '') {
-        $errors[] = 'পিতা ও মাতার নামের প্রথম ও শেষ অংশ ইংরেজিতে দিন';
+    if ($fatherLastEn === '' || $motherLastEn === '') {
+        $errors[] = 'পিতা ও মাতার নাম ইংরেজিতে দিন — এক শব্দের নাম হলে শুধু শেষ অংশে লিখুন';
     }
     if ($geoDiv <= 0 || $geoDist <= 0 || $geoCity <= 0) {
         $errors[] = 'বিভাগ, জেলা ও উপজেলা নির্বাচন করুন';
@@ -1459,10 +1459,10 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 
 <section class="card"><div class="card-head"><span class="num">২</span><h2>শিশুর তথ্য<small>জন্ম সনদের নাম অনুযায়ী</small></h2></div><div class="card-body">
 <div class="grid2">
-<label class="field"><span>নামের প্রথম অংশ (বাংলা) <b>*</b></span><input name="personFirstBn" id="personFirstBn" autocomplete="off" required></label>
-<label class="field"><span>নামের শেষ অংশ (বাংলা) <b>*</b></span><input name="personLastBn" id="personLastBn" autocomplete="off" required></label>
-<label class="field"><span>First name (English) <b>*</b></span><input name="personFirstEn" id="personFirstEn" autocomplete="off" required></label>
-<label class="field"><span>Last name (English) <b>*</b></span><input name="personLastEn" id="personLastEn" autocomplete="off" required></label>
+<label class="field"><span>নামের প্রথম অংশ (বাংলা)</span><input name="personFirstBn" id="personFirstBn" autocomplete="off"><small class="hint">এক শব্দের নাম হলে খালি রাখুন</small></label>
+<label class="field"><span>নামের শেষ অংশ (বাংলা) <b>*</b></span><input name="personLastBn" id="personLastBn" autocomplete="off" required><small class="hint">এক শব্দের নাম হলে পুরো নাম এখানে দিন</small></label>
+<label class="field"><span>First name (English)</span><input name="personFirstEn" id="personFirstEn" autocomplete="off"><small class="hint">Leave blank for a single-word name</small></label>
+<label class="field"><span>Last name (English) <b>*</b></span><input name="personLastEn" id="personLastEn" autocomplete="off" required><small class="hint">Put the full single-word name here</small></label>
 <label class="field"><span>জন্ম তারিখ <b>*</b></span><input name="dob" id="dob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10" required><small class="hint">যেমন: 05/08/2007</small></label>
 <label class="field"><span>লিঙ্গ <b>*</b></span><select name="gender" id="gender" required><option value="">নির্বাচন করুন</option><option value="FEMALE">মহিলা</option><option value="MALE">পুরুষ</option><option value="THIRD_GENDER">তৃতীয় লিঙ্গ</option></select></label>
 <label class="field"><span>সন্তান সংখ্যা <b>*</b></span><select name="thChild" id="thChild" required>
@@ -1470,7 +1470,7 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 </select></label>
 <label class="field"><span>জাতীয় পরিচয়পত্র নম্বর (ঐচ্ছিক)</span><input name="nid" id="nid" inputmode="numeric" maxlength="17"><small class="hint">১৮ বছরের বেশি হলে প্রযোজ্য</small></label>
 </div>
-<div class="notice">পুরো নাম: <strong id="namePreviewBn">—</strong> / <strong id="namePreviewEn">—</strong></div>
+<div class="notice">পুরো নাম: <strong id="namePreviewBn">—</strong> / <strong id="namePreviewEn">—</strong><br>এক শব্দের নাম হলে প্রথম অংশ খালি রেখে পুরো নাম শেষ অংশে লিখুন। যেমন: <strong>সুরাইয়া</strong> → প্রথম অংশ খালি, শেষ অংশ <strong>সুরাইয়া</strong>।</div>
 </div></section>
 
 <section class="card"><div class="card-head"><span class="num">৩</span><h2>জন্মস্থান ও ঠিকানা<small>স্থায়ী ও বর্তমান ঠিকানা একই ধর হবে</small></h2></div><div class="card-body">
@@ -1488,13 +1488,13 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 
 <section class="card"><div class="card-head"><span class="num">৪</span><h2>পিতা-মাতার তথ্য<small>নাম বাংলা ও ইংরেজিতে দিন</small></h2></div><div class="card-body">
 <div class="grid2">
-<label class="field"><span>পিতার প্রথম অংশ (বাংলা) <b>*</b></span><input name="fatherFirstBn" id="fatherFirstBn" required></label>
+<label class="field"><span>পিতার প্রথম অংশ (বাংলা)</span><input name="fatherFirstBn" id="fatherFirstBn"><small class="hint">এক শব্দের নাম হলে খালি রাখুন</small></label>
 <label class="field"><span>পিতার শেষ অংশ (বাংলা) <b>*</b></span><input name="fatherLastBn" id="fatherLastBn" required></label>
-<label class="field"><span>Father first name (English) <b>*</b></span><input name="fatherFirstEn" id="fatherFirstEn" required></label>
+<label class="field"><span>Father first name (English)</span><input name="fatherFirstEn" id="fatherFirstEn"><small class="hint">Leave blank for a single-word name</small></label>
 <label class="field"><span>Father last name (English) <b>*</b></span><input name="fatherLastEn" id="fatherLastEn" required></label>
-<label class="field"><span>মাতার প্রথম অংশ (বাংলা) <b>*</b></span><input name="motherFirstBn" id="motherFirstBn" required></label>
+<label class="field"><span>মাতার প্রথম অংশ (বাংলা)</span><input name="motherFirstBn" id="motherFirstBn"><small class="hint">এক শব্দের নাম হলে খালি রাখুন</small></label>
 <label class="field"><span>মাতার শেষ অংশ (বাংলা) <b>*</b></span><input name="motherLastBn" id="motherLastBn" required></label>
-<label class="field"><span>Mother first name (English) <b>*</b></span><input name="motherFirstEn" id="motherFirstEn" required></label>
+<label class="field"><span>Mother first name (English)</span><input name="motherFirstEn" id="motherFirstEn"><small class="hint">Leave blank for a single-word name</small></label>
 <label class="field"><span>Mother last name (English) <b>*</b></span><input name="motherLastEn" id="motherLastEn" required></label>
 <label class="field"><span>পিতার জন্ম তারিখ (ঐচ্ছিক)</span><input name="fatherDob" id="fatherDob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"></label>
 <label class="field"><span>মাতার জন্ম তারিখ (ঐচ্ছিক)</span><input name="motherDob" id="motherDob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"></label>
