@@ -123,6 +123,7 @@ function ff_state_default(): array
         'verified' => false,
         'otp_phone' => '',
         'verified_at' => 0,
+        'otp_code' => '',
         'types_dob' => '',
         'required_types' => [],
     ];
@@ -713,6 +714,7 @@ function ff_action_send_otp(string $sid, array $state): array
     $state['otp_phone'] = $c['phone'];
     $state['verified'] = false;
     $state['verified_at'] = 0;
+    $state['otp_code'] = '';
     ff_state_save($sid, $state);
     return ['ok' => true, 'message' => $message !== '' ? $message : 'ওটিপি পাঠানো হয়েছে', 'phone' => ff_phone_display($c['phone'])];
 }
@@ -757,6 +759,7 @@ function ff_action_verify_otp(string $sid, array $state): array
     $state['verified'] = true;
     $state['otp_phone'] = $c['phone'];
     $state['verified_at'] = time();
+    $state['otp_code'] = $otp;
     ff_state_save($sid, $state);
     return ['ok' => true, 'message' => 'মোবাইল নম্বর যাচাই হয়েছে'];
 }
@@ -816,6 +819,9 @@ function ff_action_submit(string $sid, array $state): array
     $motherDob = ff_date(ff_post('motherDob'));
     $phone = ff_phone(ff_post('phone'));
     $otp = preg_replace('/\D+/', '', ff_digits(ff_post('otp'))) ?? '';
+    if ($otp === '' && !empty($state['otp_code'])) {
+        $otp = (string)$state['otp_code'];
+    }
     $relationInput = ff_post('relationWithApplicant');
     if ($relationInput === '') {
         $relationInput = ff_post('relation');
@@ -1155,6 +1161,7 @@ function ff_action_submit(string $sid, array $state): array
         $state['verified'] = false;
         $state['otp_phone'] = '';
         $state['verified_at'] = 0;
+        $state['otp_code'] = '';
         $state['required_types'] = [];
         ff_state_save($sid, $state);
         return [
@@ -1169,6 +1176,13 @@ function ff_action_submit(string $sid, array $state): array
     $msg = ff_extract_errors($html);
     if ($msg === '' || strlen($msg) > 400) {
         $msg = 'আবেদন জমা হয়নি, তথ্য যাচাই করুন';
+    }
+    if (preg_match('/ওটিপি|otp/i', $msg)) {
+        $state['verified'] = false;
+        $state['verified_at'] = 0;
+        $state['otp_phone'] = '';
+        $state['otp_code'] = '';
+        ff_state_save($sid, $state);
     }
     return ['ok' => false, 'message' => $msg, 'debug' => mb_substr($plain, 0, 500)];
 }
@@ -1579,7 +1593,7 @@ let verified=false;
 let verifiedPhone='';
 function requireBasic(){if(!bootReady){toast('BDRIS সেশন প্রস্তুত নয়, পেজ রিফ্রেশ করুন',true);return false}if(!fullName('personFirstEn','personLastEn')||!fullName('personFirstBn','personLastBn')){toast('শিশুর নাম আগে দিন',true);return false}if(!/^\d{11}$/.test(enDigits(val('phone')).replace(/\D/g,''))){toast('সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন',true);return false}if(!val('relationWithApplicant')||!val('applicantName')){toast('আবেদনকারীর তথ্য দিন',true);return false}return true}
 $('#sendOtpBtn').addEventListener('click',async function(){if(!requireBasic())return;const b=this;setBusy(b,true);try{const j=await post('send_otp',otpPayload());toast(j.message||'ওটিপি পাঠানো হয়েছে');$('#otpBox').classList.remove('hidden');$('#otp').focus();$('#verifyStatus').className='status';$('#verifyStatus').querySelector('b').textContent='ওটিপি পাঠানো হয়েছে'}catch(e){toast(e.message,true)}finally{setBusy(b,false)}});
-$('#verifyOtpBtn').addEventListener('click',async function(){const code=enDigits(val('otp')).replace(/\D/g,'');if(code.length<4){toast('ওটিপি কোড দিন',true);return}const b=this;setBusy(b,true);try{const p=otpPayload();p.otp=code;const j=await post('verify_otp',p);verified=true;verifiedPhone=enDigits(val('phone')).replace(/\D/g,'');toast(j.message||'যাচাই হয়েছে');$('#verifyStatus').className='status ok';$('#verifyStatus').querySelector('b').textContent='যাচাই হয়েছে';$('#submitBtn').disabled=false;$('#submitHint').textContent='এখন আবেদন জমা দিতে পারেন'}catch(e){toast(e.message,true)}finally{setBusy(b,false)}});
+$('#verifyOtpBtn').addEventListener('click',async function(){const code=enDigits(val('otp')).replace(/\D/g,'');if(code.length<4){toast('ওটিপি কোড দিন',true);return}const b=this;setBusy(b,true);try{const p=otpPayload();p.otp=code;const j=await post('verify_otp',p);verified=true;verifiedPhone=enDigits(val('phone')).replace(/\D/g,'');toast(j.message||'যাচাই হয়েছে');$('#verifyStatus').className='status ok';$('#verifyStatus').querySelector('b').textContent='যাচাই হয়েছে';$('#submitBtn').disabled=false;$('#submitHint').textContent='ওটিপি যাচাই হয়েছে, আবেদন জমা হচ্ছে…';setTimeout(function(){appForm.requestSubmit()},400)}catch(e){toast(e.message,true)}finally{setBusy(b,false)}});
 
 $('#uploadBtn').addEventListener('click',function(){if(!bootReady){toast('BDRIS সেশন প্রস্তুত নয়, পেজ রিফ্রেশ করুন',true);return}const type=val('attachmentType');if(!type){toast('আগে জন্ম তারিখ দিন',true);return}if(uploaded.some(function(a){return Number(a.type)===Number(type)})){toast('এই ধরনের সংযুক্তি আগেই আছে, মুছে আবার চেষ্টা করুন',true);return}$('#fileInput').click()});
 $('#fileInput').addEventListener('change',async function(){const f=this.files&&this.files[0];if(!f)return;const sel=$('#attachmentType');const o=sel.options[sel.selectedIndex];const type=Number(sel.value);const typeName=o?o.textContent:'';const b=$('#uploadBtn');setBusy(b,true);try{const fd=new FormData();fd.append('file',f);fd.append('attachmentType',String(type));fd.append('attachmentName',typeName);const r=await fetch(api('upload'),{method:'POST',body:fd,headers:{'Accept':'application/json'}});let j=null;try{j=await r.json()}catch(e){}if(!r.ok||!j||!j.ok)throw new Error((j&&j.message)||'আপলোড হয়নি');uploaded.length=0;j.items.forEach(function(x){uploaded.push(x)});renderFiles();updateTypeHint();toast('সংযুক্তি যোগ হয়েছে')}catch(e){toast(e.message,true)}finally{$('#fileInput').value='';setBusy(b,false)}});
