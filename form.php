@@ -552,6 +552,81 @@ function ff_action_types(string $sid, array $state): array
     return ['ok' => true, 'items' => $items, 'required' => $ids];
 }
 
+function ff_action_parent_info(string $sid, array $state): array
+{
+    $in = ff_input();
+    $type = ff_val($in, 'type') === 'mother' ? 'mother' : 'father';
+    $label = $type === 'father' ? 'পিতার' : 'মাতার';
+    $ubrn = preg_replace('/\D+/', '', ff_digits(ff_val($in, 'ubrn'))) ?? '';
+    $dob = ff_date(ff_val($in, 'dob'));
+    $nameEn = ff_val($in, 'nameEn');
+    $childDob = ff_date(ff_val($in, 'childDob'));
+    if (strlen($ubrn) !== 17) {
+        return ['ok' => false, 'message' => '১৭ ডিজিটের জন্ম নিবন্ধন নম্বর দিন'];
+    }
+    if ($dob === '') {
+        return ['ok' => false, 'message' => $label . ' জন্ম তারিখ সঠিকভাবে দিন'];
+    }
+    if ($nameEn === '') {
+        return ['ok' => false, 'message' => $label . ' নাম ইংরেজিতে দিন'];
+    }
+    if ($childDob === '') {
+        return ['ok' => false, 'message' => 'আগে শিশুর জন্ম তারিখ দিন'];
+    }
+    $state = ff_ensure($sid, $state);
+    $post = http_build_query([
+        'ubrn' => $ubrn,
+        'dob' => $dob,
+        'nameEn' => $nameEn,
+        'childBirthDate' => $childDob,
+        'gender' => $type === 'father' ? 'MALE' : 'FEMALE',
+    ]);
+    $headers = [
+        'client: bris',
+        'Accept: application/json, text/plain, */*',
+        'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With: XMLHttpRequest',
+        $state['header'] . ': ' . $state['token'],
+        'Origin: ' . FF_UP,
+        'Referer: ' . FF_UP . '/br/application',
+    ];
+    $r = ff_http($sid, FF_UP . '/api/br/parent-info', $post, $headers);
+    if (ff_is_login((string)$r['redirect'])) {
+        $state['token'] = '';
+        $state['fetched_at'] = 0;
+        $state = ff_ensure($sid, $state, true);
+        $headers[4] = $state['header'] . ': ' . $state['token'];
+        $r = ff_http($sid, FF_UP . '/api/br/parent-info', $post, $headers);
+    }
+    $j = json_decode((string)$r['body'], true);
+    if (!is_array($j)) {
+        $msg = ff_extract_errors((string)$r['body']);
+        return ['ok' => false, 'message' => $msg !== '' ? $msg : 'পিতামাতার তথ্য যাচাই করা যায়নি'];
+    }
+    if ($j === []) {
+        return ['ok' => false, 'message' => 'এই জন্ম নিবন্ধন নম্বর ও জন্ম তারিখে কোনো রেকর্ড পাওয়া যায়নি'];
+    }
+    if (count($j) > 1) {
+        return ['ok' => false, 'message' => 'একাধিক রেকর্ড পাওয়া গেছে, নম্বর ও জন্ম তারিখ যাচাই করুন'];
+    }
+    $p = is_array($j[0]) ? $j[0] : [];
+    $expected = $type === 'father' ? 0 : 1;
+    if (isset($p['gender']) && (int)$p['gender'] !== $expected) {
+        return ['ok' => false, 'message' => $label . ' রেকর্ডের লিঙ্গ মেলেনি'];
+    }
+    $nameBn = trim((string)($p['personNameBn'] ?? ''));
+    $nameEnOut = trim((string)($p['personNameEn'] ?? ''));
+    if ($nameBn === '' && $nameEnOut === '') {
+        return ['ok' => false, 'message' => 'রেকর্ডে নাম পাওয়া যায়নি'];
+    }
+    return [
+        'ok' => true,
+        'message' => $label . ' তথ্য যাচাই হয়েছে',
+        'nameBn' => $nameBn,
+        'nameEn' => $nameEnOut,
+    ];
+}
+
 function ff_action_upload(string $sid, array $state): array
 {
     $type = (int)($_POST['attachmentType'] ?? 0);
@@ -654,7 +729,7 @@ function ff_otp_context(array $in): array
         return ['error' => 'আবেদনকারীর সম্পর্ক নির্বাচন করুন'];
     }
     if ($missing) {
-        return ['error' => 'শিশুর নামের সব ঘর পূরণ করুন'];
+        return ['error' => 'শিশু ও পিতা-মাতার নামের সব ঘর পূরণ করুন'];
     }
     $applicantName = ff_val($in, 'applicantName');
     if ($applicantName === '') {
@@ -814,18 +889,10 @@ function ff_action_submit(string $sid, array $state): array
     $gender = ff_post('gender');
     $thChild = (int)ff_post('thChild');
     $nid = preg_replace('/\D+/', '', ff_digits(ff_post('nid'))) ?? '';
-    $fatherFirstBn = ff_post('fatherFirstBn');
-    $fatherLastBn = ff_post('fatherLastBn');
-    $fatherFirstEn = ff_post('fatherFirstEn');
-    $fatherLastEn = ff_post('fatherLastEn');
-    $motherFirstBn = ff_post('motherFirstBn');
-    $motherLastBn = ff_post('motherLastBn');
-    $motherFirstEn = ff_post('motherFirstEn');
-    $motherLastEn = ff_post('motherLastEn');
-    $fatherFullBn = trim($fatherFirstBn . ' ' . $fatherLastBn);
-    $fatherFullEn = trim($fatherFirstEn . ' ' . $fatherLastEn);
-    $motherFullBn = trim($motherFirstBn . ' ' . $motherLastBn);
-    $motherFullEn = trim($motherFirstEn . ' ' . $motherLastEn);
+    $fatherFullBn = ff_post('fatherNameBn');
+    $fatherFullEn = ff_post('fatherNameEn');
+    $motherFullBn = ff_post('motherNameBn');
+    $motherFullEn = ff_post('motherNameEn');
     $fatherUbrn = preg_replace('/\D+/', '', ff_digits(ff_post('fatherUbrn'))) ?? '';
     $motherUbrn = preg_replace('/\D+/', '', ff_digits(ff_post('motherUbrn'))) ?? '';
     $fatherDob = ff_date(ff_post('fatherDob'));
@@ -888,12 +955,6 @@ function ff_action_submit(string $sid, array $state): array
     if ($fatherFullBn === '' || $fatherFullEn === '' || $motherFullBn === '' || $motherFullEn === '') {
         $errors[] = 'পিতা ও মাতার নাম (বাংলা ও ইংরেজি) দিন';
     }
-    if ($fatherLastBn === '' || $motherLastBn === '') {
-        $errors[] = 'পিতা ও মাতার নাম বাংলায় দিন — এক শব্দের নাম হলে শুধু শেষ অংশে লিখুন';
-    }
-    if ($fatherLastEn === '' || $motherLastEn === '') {
-        $errors[] = 'পিতা ও মাতার নাম ইংরেজিতে দিন — এক শব্দের নাম হলে শুধু শেষ অংশে লিখুন';
-    }
     if ($geoDiv <= 0 || $geoDist <= 0 || $geoCity <= 0) {
         $errors[] = 'বিভাগ, জেলা ও উপজেলা নির্বাচন করুন';
     }
@@ -908,9 +969,6 @@ function ff_action_submit(string $sid, array $state): array
     }
     if ($villageBn === '' || $villageEn === '' || $postOfcBn === '' || $postOfcEn === '') {
         $errors[] = 'গ্রাম ও ডাকঘরের নাম বাংলা ও ইংরেজিতে দিন';
-    }
-    if (strlen($postCode) !== 4) {
-        $errors[] = '৪ ডিজিটের পোস্ট কোড দিন';
     }
     if ($phone === '') {
         $errors[] = 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন';
@@ -1209,72 +1267,146 @@ function ff_page_open(string $title): void
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0c4a35">
 <title>' . ff_h($title) . '</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 ';
     echo <<<'HTML'
 <style>
-:root{--ink:#102a22;--muted:#5d746b;--line:#dbe6e0;--paper:#f3f7f4;--card:#fff;--brand:#14684d;--brand2:#0e503a;--gold:#c1932f;--danger:#b42318;--ok:#087443;--soft:#eaf3ee}
-*{box-sizing:border-box}html,body{margin:0;padding:0}
-body{font-family:'Noto Sans Bengali','Hind Siliguri',system-ui,-apple-system,'Segoe UI',sans-serif;background:linear-gradient(180deg,#eef5f0 0,#f8faf8 320px,#f8faf8 100%);color:var(--ink);line-height:1.5}
-a{color:var(--brand);text-decoration:none}.wrap{width:min(1160px,calc(100% - 28px));margin:0 auto}
-.top{background:var(--brand2);color:#fff;border-bottom:4px solid var(--gold)}
-.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0}
-.brand{display:flex;align-items:center;gap:12px}.seal{width:44px;height:44px;border-radius:50%;background:var(--gold);color:#1b2a24;display:grid;place-items:center;font-weight:800;font-size:20px;box-shadow:inset 0 0 0 3px rgba(255,255,255,.35)}
-.brand strong{display:block;font-size:18px;letter-spacing:.2px}.brand small{display:block;opacity:.8;font-size:12px}
-.pill{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);padding:6px 12px;border-radius:999px;font-size:12px;white-space:nowrap}
-main{padding:22px 0 40px}.layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,.75fr);gap:18px;align-items:start}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 1px 2px rgba(16,42,34,.04),0 10px 30px rgba(16,42,34,.03);margin-bottom:16px;overflow:hidden}
-.card-head{display:flex;gap:10px;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#fbfdfb,#f6faf7)}
-.num{width:28px;height:28px;border-radius:8px;background:var(--soft);color:var(--brand);display:grid;place-items:center;font-weight:800;font-size:13px;flex:0 0 auto}
-.card-head h2{font-size:15px;margin:0}.card-head small{display:block;color:var(--muted);font-size:11px;font-weight:400}
-.card-body{padding:18px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.field{display:block}.field>span{display:block;font-size:12px;font-weight:600;color:#274b3f;margin-bottom:6px}.field>span b{color:var(--danger);font-weight:700}
-input,select,textarea{width:100%;border:1px solid #cfded6;background:#fff;border-radius:9px;padding:10px 12px;font:inherit;font-size:14px;color:var(--ink);outline:none;transition:border .15s,box-shadow .15s}
-input:focus,select:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(20,104,77,.12)}input[readonly]{background:#f5f8f6;color:#52665d}
-textarea{min-height:74px;resize:vertical}.hint{font-size:11px;color:var(--muted);margin-top:4px;display:block}
-.row{margin-bottom:14px}.row:last-child{margin-bottom:0}
-.office{border:1px dashed #b9d3c7;background:linear-gradient(180deg,#f7fcf9,#eef7f1);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:center;margin-bottom:16px}
-.office .ic{width:38px;height:38px;border-radius:10px;background:#fff;border:1px solid #cfe3d9;display:grid;place-items:center;font-size:18px;flex:0 0 auto}
-.office strong{display:block;font-size:14px}.office small{display:block;color:var(--muted);font-size:12px}
-.side .card{position:sticky;top:16px}.side .card+.card{position:static}
-.steps{list-style:none;margin:0;padding:0}.steps li{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px dashed #e3ede7;font-size:13px}.steps li:last-child{border-bottom:0}
-.steps .dot{width:22px;height:22px;border-radius:50%;background:#edf4f0;color:var(--muted);display:grid;place-items:center;font-size:11px;font-weight:700;flex:0 0 auto}.steps li.on .dot{background:var(--ok);color:#fff}
-.status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border-radius:10px;background:#f6f9f7;border:1px solid var(--line);font-size:12px;margin-top:10px}
-.status b{font-weight:700}.status.ok{background:#eefaf3;border-color:#bfe6d2;color:var(--ok)}
-.btn{appearance:none;border:0;border-radius:9px;padding:11px 16px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .05s,opacity .15s}
-.btn:active{transform:translateY(1px)}.btn[disabled]{opacity:.55;cursor:not-allowed}.btn-main{background:var(--brand);color:#fff}.btn-main:hover{background:var(--brand2)}
-.btn-ghost{background:#fff;border:1px solid #c9dad1;color:var(--brand)}.btn-ghost:hover{background:#f4faf6}.btn-danger{background:#fff;border:1px solid #f1c9c4;color:var(--danger)}
-.btn-sm{padding:8px 12px;font-size:12px}.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
-.uploader{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}.type-select{min-width:0}
-.files{margin-top:12px;border-top:1px solid var(--line)}.file{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px}
-.file .t{flex:1;min-width:0}.file .t strong{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.file .t small{color:var(--muted);font-size:11px}
-.file .id{font-family:ui-monospace,monospace;font-size:10px;color:var(--muted);background:#f2f6f4;padding:2px 6px;border-radius:5px}
-.notice{font-size:12px;padding:10px 12px;border-radius:9px;border:1px solid #e5dcc2;background:#fdf9ee;color:#6b531a;margin-top:10px}
-.alert{font-size:13px;padding:12px 14px;border-radius:10px;margin-bottom:14px}.alert.err{background:#fef1ef;border:1px solid #f3c5bf;color:#8f2117}
-.alert.ok{background:#eefaf3;border:1px solid #bfe6d2;color:#0a5c3f}
+:root{--ink:#132a20;--ink-soft:#344940;--muted:#63766c;--line:#e2eae5;--line-strong:#cfded5;--paper:#f3f7f4;--card:#fff;--brand:#0f5e43;--brand-deep:#0a4230;--brand-soft:#ecf4ef;--gold:#c19a4b;--gold-deep:#9c7729;--gold-soft:#fbf6e9;--danger:#b42318;--ok:#0d7a4c;--ok-soft:#edf9f2;--radius:15px;--radius-sm:10px;--shadow-1:0 1px 2px rgba(16,42,34,.04),0 2px 8px -2px rgba(16,42,34,.05);--shadow-2:0 1px 2px rgba(16,42,34,.04),0 18px 40px -24px rgba(16,42,34,.18);--shadow-3:0 2px 4px rgba(16,42,34,.04),0 30px 70px -30px rgba(16,42,34,.28);--font-bn:'Hind Siliguri','Noto Sans Bengali',system-ui,-apple-system,'Segoe UI',sans-serif;--font-en:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;padding:0;font-family:var(--font-bn);color:var(--ink);line-height:1.55;background-color:var(--paper);background-image:radial-gradient(900px 340px at 50% -160px,rgba(15,94,67,.10),transparent 65%),radial-gradient(620px 320px at 100% 0,rgba(193,154,75,.07),transparent 62%),linear-gradient(180deg,#f8faf8 0,#f3f7f4 480px,#f3f7f4 100%);-webkit-font-smoothing:antialiased}
+::selection{background:rgba(15,94,67,.16)}
+a{color:var(--brand);text-decoration:none}
+.wrap{width:min(1180px,calc(100% - 32px));margin:0 auto}
+.top{position:relative;overflow:hidden;background:linear-gradient(115deg,#082d21 0%,#0c4a35 45%,#116b4c 100%);color:#fff;border-bottom:3px solid var(--gold)}
+.top::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(65deg,rgba(255,255,255,.045) 0 1px,transparent 1px 15px),repeating-linear-gradient(-65deg,rgba(255,255,255,.035) 0 1px,transparent 1px 15px);pointer-events:none}
+.top::after{content:"";position:absolute;right:-130px;top:-180px;width:440px;height:440px;border-radius:50%;background:radial-gradient(circle,rgba(193,154,75,.22),transparent 62%);pointer-events:none}
+.top .wrap{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0}
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.seal{width:48px;height:48px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;color:#0b3a2a;background:radial-gradient(circle at 30% 25%,#e8ce8b,#c19a4b 58%,#a37a2c);box-shadow:inset 0 0 0 1px rgba(255,255,255,.45),inset 0 0 0 4px rgba(255,255,255,.18),0 10px 22px -10px rgba(0,0,0,.55)}
+.seal svg{width:26px;height:26px;display:block}
+.brand-text strong{display:block;font-size:19px;font-weight:700;letter-spacing:.2px;line-height:1.25}
+.brand-text small{display:block;margin-top:2px;font-family:var(--font-en);font-size:10.5px;font-weight:500;letter-spacing:1.6px;text-transform:uppercase;color:rgba(255,255,255,.62)}
+.pill{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:7px 13px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap;backdrop-filter:blur(6px)}
+.pill svg{width:14px;height:14px;opacity:.85}
+main{padding:22px 0 44px}
+.parent-pair{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;align-items:stretch}
+.parent-pair .card{margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-2);margin-bottom:18px;overflow:hidden}
+.card-head{display:flex;gap:12px;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#fdfefd,#f7faf8)}
+.num{width:34px;height:34px;border-radius:10px;background:linear-gradient(150deg,#12724f,#0b4a35);color:#fff;display:grid;place-items:center;font-family:var(--font-bn);font-weight:700;font-size:13.5px;flex:0 0 auto;box-shadow:0 8px 16px -10px rgba(10,66,48,.7),inset 0 1px 0 rgba(255,255,255,.18)}
+.card-head h2{font-size:15px;font-weight:700;margin:0;line-height:1.35;color:var(--ink)}
+.card-head small{display:block;color:var(--muted);font-size:11.5px;font-weight:400;margin-top:2px}
+.card-body{padding:20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.span2{grid-column:1/-1}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.field{display:block;min-width:0}
+.field>span{display:flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:#31453b;margin-bottom:7px;line-height:1.4}
+.field>span b{color:var(--danger);font-weight:700;font-size:13px;line-height:1}
+input,select,textarea{width:100%;border:1px solid #d8e3dc;background:#fcfdfc;border-radius:var(--radius-sm);padding:11px 13px;font:inherit;font-size:14px;color:var(--ink);outline:none;transition:border-color .16s,box-shadow .16s,background .16s;box-shadow:inset 0 1px 1px rgba(16,42,34,.02)}
+input::placeholder,textarea::placeholder{color:#a2b0a8}
+input:hover,select:hover,textarea:hover{border-color:#c2d2c8}
+input:focus,select:focus,textarea:focus{border-color:var(--brand);background:#fff;box-shadow:0 0 0 4px rgba(15,94,67,.10)}
+input[readonly]{background:#f3f7f4;color:#5b6e64;border-color:var(--line);box-shadow:none}
+input:disabled,select:disabled,textarea:disabled{background:#f3f7f4;color:#5b6e64;border-color:var(--line);cursor:not-allowed;opacity:1}
+select:disabled{background-image:none;padding-right:13px}
+textarea:disabled{resize:none}
+input[type=checkbox]{width:18px;height:18px;padding:0;border:0;background:transparent;box-shadow:none;accent-color:var(--brand);cursor:pointer}
+input[type=file]{padding:10px;background:#fff}
+select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2363766c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:15px;padding-right:38px;cursor:pointer}
+textarea{min-height:84px;resize:vertical}
+.input-group{display:flex;gap:8px;align-items:stretch}
+.input-group input{flex:1;min-width:0}
+.input-group .btn{flex:0 0 auto}
+.verify-btn{padding:0 16px;font-size:12.5px}
+.verify-btn.is-done{background:var(--ok-soft);border-color:#bfe6d2;color:var(--ok)}
+.hint{display:block;font-size:11.5px;line-height:1.45;color:var(--muted);margin-top:5px}
+.row{margin-bottom:16px}
+.row:last-child{margin-bottom:0}
+.office{position:relative;display:flex;gap:14px;align-items:center;border:1px solid #e8dec4;background:linear-gradient(120deg,#fdfaf2,#faf5e9);border-radius:12px;padding:14px 16px;margin-bottom:0;overflow:hidden}
+.office .ic{width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #ecdfc0;color:var(--gold-deep);display:grid;place-items:center;flex:0 0 auto;box-shadow:0 6px 14px -10px rgba(156,119,41,.55)}
+.office .ic svg{width:22px;height:22px}
+.office strong{display:block;font-size:14px;color:#40350f}
+.office small{display:block;color:#7b6a3e;font-size:11.5px;margin-top:2px}
+.status{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:10px;background:#f6f9f7;border:1px solid var(--line);font-size:12.5px;color:var(--muted);margin-top:12px}
+.status b{font-weight:700;color:var(--ink)}
+.status.ok{background:var(--ok-soft);border-color:#bfe6d2;color:var(--ok)}
+.status.ok b{color:var(--ok)}
+.btn{appearance:none;border:1px solid transparent;border-radius:var(--radius-sm);padding:11px 18px;font:inherit;font-weight:600;font-size:13.5px;line-height:1.2;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;transition:background .18s,border-color .18s,box-shadow .18s,transform .06s}
+.btn:focus-visible{outline:3px solid rgba(15,94,67,.25);outline-offset:2px}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.55;cursor:not-allowed;box-shadow:none;transform:none}
+.btn-main{background:linear-gradient(180deg,#127a55,#0c563e);color:#fff;border-color:#0a4a35;box-shadow:0 1px 2px rgba(10,66,48,.28),0 10px 20px -12px rgba(10,66,48,.6),inset 0 1px 0 rgba(255,255,255,.14)}
+.btn-main:hover{background:linear-gradient(180deg,#168761,#0e5f45)}
+.btn-ghost{background:#fff;border-color:#cbd9d1;color:var(--brand-deep);box-shadow:var(--shadow-1)}
+.btn-ghost:hover{background:#f5faf7;border-color:#b7cbc0}
+.btn-danger{background:#fff;border-color:#f0cfcb;color:var(--danger)}
+.btn-danger:hover{background:#fdf4f3}
+.btn-sm{padding:7px 11px;font-size:12px;border-radius:8px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.uploader{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end}
+.type-select{min-width:0}
+.files{margin-top:14px;border-top:1px solid var(--line)}
+.file{display:flex;gap:12px;align-items:center;padding:11px 2px;border-bottom:1px solid var(--line);font-size:12.5px}
+.file:last-child{border-bottom:0}
+.file .t{flex:1;min-width:0}
+.file .t strong{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file .t small{color:var(--muted);font-size:11.5px}
+.file .id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--brand-deep);background:var(--brand-soft);border:1px solid #d9e9e0;padding:3px 7px;border-radius:6px}
+.notice{position:relative;font-size:12.5px;line-height:1.6;padding:11px 14px 11px 17px;border-radius:10px;border:1px solid #eee2c6;background:linear-gradient(120deg,#fdfbf4,#faf6ea);color:#6a5624;margin-top:12px}
+.notice::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--gold)}
+.notice strong{color:#4d3d14}
+.name-preview{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);font-size:12px;line-height:1.6;color:var(--muted)}
+.name-preview strong{color:var(--ink-soft);font-weight:600}
+.name-preview span{display:block;font-size:11.5px;margin-top:2px}
+.declaration{display:flex;gap:11px;align-items:flex-start;font-size:13px;line-height:1.55;background:#f8faf9;border:1px solid var(--line);border-radius:11px;padding:13px 15px;cursor:pointer}
+.declaration input{width:18px;height:18px;margin-top:2px;flex:0 0 auto;accent-color:var(--brand)}
+.alert{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.55;padding:13px 16px;border-radius:11px;margin-bottom:16px}
+.alert.err{background:#fdf1ef;border:1px solid #f1c7c2;color:#8a1f15}
+.alert.ok{background:var(--ok-soft);border:1px solid #bfe6d2;color:#0a5c3f}
 .hidden{display:none!important}
-.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(14px);background:#152f26;color:#fff;padding:11px 16px;border-radius:10px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.22);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;max-width:min(92vw,560px);text-align:center}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}.toast.bad{background:#7a1f17}
-.result{max-width:720px;margin:38px auto;background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(16,42,34,.08)}
-.result.wide{max-width:920px}.app-hero{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(135deg,#0e503a,#14684d);color:#fff;border-radius:12px;padding:16px 18px;margin:16px 0}
-.app-hero span{font-size:12px;opacity:.8}.app-hero strong{font-family:ui-monospace,monospace;font-size:24px;letter-spacing:.8px}
-.info-sec{border:1px solid var(--line);border-radius:11px;margin:12px 0;overflow:hidden}
-.info-sec h3{margin:0;padding:10px 14px;background:#f7faf8;border-bottom:1px solid var(--line);font-size:13px}
-.info-sec .kv{margin:0;border:0;border-radius:0;background:#fff;grid-template-columns:170px 1fr;padding:12px 14px}
-@media print{.top,footer,.actions,.notice,.result-top .result-mark{display:none!important}body{background:#fff}.result{box-shadow:none;border:0;margin:0;max-width:none}.info-sec{break-inside:avoid}.result-top{padding:0 0 8px}.app-hero{background:#fff;color:#000;border:1px solid #bbb}.app-hero strong{color:#000}}
-.result-top{padding:26px 26px 20px;text-align:center}.result-mark{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;margin:0 auto 12px;font-size:28px;font-weight:800}
-.result.ok .result-mark{background:#e8f8ef;color:var(--ok)}.result.bad .result-mark{background:#fdeceb;color:var(--danger)}
-.result h1{font-size:21px;margin:0 0 6px}.result p{margin:0;color:var(--muted);font-size:13px}
-.result-body{padding:0 26px 24px}.kv{display:grid;grid-template-columns:150px 1fr;gap:8px 14px;font-size:13px;background:#f7faf8;border:1px solid var(--line);border-radius:11px;padding:14px;margin:16px 0}
-.kv span{color:var(--muted)}.kv strong{font-weight:700}.appno{font-family:ui-monospace,monospace;font-size:18px;letter-spacing:.5px;color:var(--brand2)}
-.debug{margin-top:14px;font-size:11px;color:var(--muted)}.debug summary{cursor:pointer}.debug pre{white-space:pre-wrap;background:#f7faf8;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow:auto;font-size:11px}
-footer{padding:20px 0 30px;color:var(--muted);font-size:11px;text-align:center}
-@media(max-width:900px){.layout{grid-template-columns:1fr}.side .card{position:static}.grid3{grid-template-columns:1fr 1fr}}
-@media(max-width:620px){.grid2,.grid3{grid-template-columns:1fr}.uploader{grid-template-columns:1fr}.brand strong{font-size:16px}.card-body{padding:14px}.kv{grid-template-columns:1fr}.top .wrap{padding:11px 0}}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(14px);background:#0c3326;color:#fff;padding:12px 18px;border:1px solid rgba(255,255,255,.12);border-radius:12px;font-size:13px;line-height:1.45;box-shadow:0 18px 40px -16px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;max-width:min(92vw,560px);text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.bad{background:#7a1f17;border-color:#8f2c22}
+.result{max-width:760px;margin:36px auto;background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-3)}
+.result.wide{max-width:960px}
+.result-top{position:relative;padding:34px 30px 24px;text-align:center;background:radial-gradient(420px 200px at 50% -80px,rgba(15,94,67,.10),transparent 70%),linear-gradient(180deg,#fbfdfc,#fff)}
+.result-top::after{content:"";position:absolute;left:30px;right:30px;bottom:0;height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent)}
+.result-mark{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;font-size:28px;font-weight:800}
+.result.ok .result-mark{background:linear-gradient(160deg,#e6f7ee,#d2f0e1);color:var(--ok);box-shadow:0 0 0 6px rgba(13,122,76,.06),0 12px 24px -14px rgba(13,122,76,.45)}
+.result.bad .result-mark{background:#fdeceb;color:var(--danger);box-shadow:0 0 0 6px rgba(180,35,24,.05)}
+.result h1{font-size:22px;font-weight:700;letter-spacing:.1px;margin:0 0 6px}
+.result p{margin:0;color:var(--muted);font-size:13px}
+.result-body{padding:0 30px 28px}
+.app-hero{position:relative;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;overflow:hidden;background:linear-gradient(120deg,#0a4230,#0f5e43 60%,#13724f);color:#fff;border:1px solid rgba(255,255,255,.08);border-radius:13px;padding:18px 20px;margin:18px 0;box-shadow:0 18px 32px -22px rgba(10,66,48,.85)}
+.app-hero::after{content:"";position:absolute;right:-60px;top:-90px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(193,154,75,.30),transparent 62%)}
+.app-hero span{position:relative;z-index:1;font-family:var(--font-en);font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;opacity:.75}
+.app-hero strong{position:relative;z-index:1;font-family:var(--font-en);font-size:26px;font-weight:700;letter-spacing:1.4px}
+.info-sec{border:1px solid var(--line);border-radius:12px;margin:14px 0;overflow:hidden;background:#fff;box-shadow:var(--shadow-1)}
+.info-sec h3{margin:0;padding:11px 16px;background:linear-gradient(180deg,#fbfdfc,#f6f9f7);border-bottom:1px solid var(--line);font-size:13px;font-weight:700;color:var(--ink-soft);letter-spacing:.1px}
+.info-sec .kv{margin:0;border:0;border-radius:0;background:#fff;grid-template-columns:190px 1fr;padding:14px 16px}
+.kv{display:grid;grid-template-columns:160px 1fr;gap:9px 16px;font-size:13px;background:#f8faf9;border:1px solid var(--line);border-radius:11px;padding:15px;margin:16px 0}
+.kv span{color:var(--muted)}
+.kv strong{font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.appno{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:18px;letter-spacing:.5px;color:var(--brand-deep)}
+.debug{margin-top:14px;font-size:11px;color:var(--muted)}
+.debug summary{cursor:pointer}
+.debug pre{white-space:pre-wrap;background:#f7faf8;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:220px;overflow:auto;font-size:11px}
+footer{position:relative;margin-top:10px;padding:22px 0 30px;color:var(--muted);font-size:11.5px;text-align:center}
+footer::before{content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);width:min(1180px,calc(100% - 32px));height:1px;background:linear-gradient(90deg,transparent,var(--line),transparent)}
+@media(max-width:960px){.parent-pair{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}.uploader{grid-template-columns:1fr}.brand-text strong{font-size:17px}.pill{display:none}.card-head{padding:14px 15px}.card-body{padding:15px}.kv{grid-template-columns:1fr}.top .wrap{padding:13px 0}.result{margin:18px auto}.result-body{padding:0 18px 22px}.result-top{padding:26px 18px 20px}.app-hero strong{font-size:22px}.info-sec .kv{grid-template-columns:1fr}input,select,textarea{font-size:16px}}
+@media print{.top,footer,.actions,.notice,.result-top .result-mark{display:none!important}body{background:#fff;background-image:none}.wrap{width:100%}.result{box-shadow:none;border:0;margin:0;max-width:none;border-radius:0}.info-sec{break-inside:avoid;box-shadow:none}.result-top{padding:0 0 8px;background:#fff}.app-hero{background:#fff;color:#000;border:1px solid #bbb;box-shadow:none}.app-hero strong{color:#000}.app-hero span{opacity:1;color:#444}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
-<header class="top"><div class="wrap"><div class="brand"><span class="seal">জ</span><div><strong>জন্ম নিবন্ধন আবেদন</strong><small>BDRIS · সরাসরি ফর্ম</small></div></div><span class="pill">অনলাইন আবেদন</span></div></header>
+<header class="top"><div class="wrap"><div class="brand"><span class="seal" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4c1.8 2.2 2.6 4.4 2.6 6.4 0 2.6-1.2 4.6-2.6 5.6-1.4-1-2.6-3-2.6-5.6C9.4 8.4 10.2 6.2 12 4Z"/><path d="M12 16c-2.8 0-5.2-1.3-6.8-3.4 2.1-.7 4.2-.4 5.8.6M12 16c2.8 0 5.2-1.3 6.8-3.4-2.1-.7-4.2-.4-5.8.6M4 19c2.5 1.1 5.2 1.6 8 1.6s5.5-.5 8-1.6"/></svg></span><div class="brand-text"><strong>জন্ম নিবন্ধন আবেদন</strong><small>BDRIS · সরাসরি ফর্ম</small></div></div><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>নিরাপদ অনলাইন আবেদন</span></div></header>
 HTML;
 }
 
@@ -1363,6 +1495,9 @@ if ($ffAction !== '') {
             case 'attachment_types':
                 $ffResult = ff_action_types($ffSid, $ffState);
                 break;
+            case 'parent_info':
+                $ffResult = ff_action_parent_info($ffSid, $ffState);
+                break;
             case 'upload':
                 $ffResult = ff_action_upload($ffSid, $ffState);
                 break;
@@ -1423,24 +1558,15 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 <?php if ($ffBootError !== '') { ?>
 <div class="alert err">BDRIS সেশনে সংযোগ করা যায়নি: <?php echo ff_h($ffBootError); ?> — পেজ রিফ্রেশ করে আবার চেষ্টা করুন।</div>
 <?php } ?>
-<div class="layout">
-<div>
 <form id="appForm" action="?action=submit" method="post" novalidate>
 
 <section class="card"><div class="card-head"><span class="num">১</span><h2>নিবন্ধন কার্যালয়<small>জন্মস্থান অনুযায়ী কার্যালয় নির্ধারিত হবে</small></h2></div><div class="card-body">
-<div class="office"><span class="ic">🏛</span><div><strong>বালুয়া ইউনিয়ন পরিষদ</strong><small>বালুয়া, সোনাতলা, বগুড়া, রাজশাহী · ডিফল্ট কার্যালয়</small></div></div>
-<div class="grid2">
-<label class="field"><span>বিভাগ <b>*</b></span><select id="birthPlaceDiv"><option value="6" data-level="1" data-name-en="RAJSHAHI DIVISION" selected>রাজশাহী বিভাগ</option></select></label>
-<label class="field"><span>জেলা <b>*</b></span><select id="birthPlaceDist"><option value="52" data-level="2" data-name-en="BOGURA" selected>বগুড়া</option></select></label>
-<label class="field"><span>উপজেলা / সিটি <b>*</b></span><select id="birthPlaceCityCorpCantOrUpazila"><option value="121" data-level="3" data-name-en="SONATOLA" selected>সোনাতলা</option></select></label>
-<label class="field geo-union-row"><span>ইউনিয়ন / পৌরসভা <b>*</b></span><select id="birthPlacePaurasavaOrUnion"><option value="1356" data-level="5" data-name-en="BALUA" selected>বালুয়া</option></select></label>
-<label class="field geo-ward-row"><span>ওয়ার্ড <b>*</b></span><select id="birthPlaceWardInPaurasavaOrUnion"><option value="30471" data-name-en="WARD - 1" selected>ওয়ার্ড - ১</option></select></label>
-</div>
+<div class="office"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V9l7-5 7 5v12"/><path d="M9 21v-6h6v6"/><path d="M9 11h.01M15 11h.01"/></svg></span><div><strong>বালুয়া ইউনিয়ন পরিষদ</strong><small>বালুয়া, সোনাতলা, বগুড়া, রাজশাহী · ডিফল্ট কার্যালয়</small></div></div>
 <input type="hidden" name="geoDiv" id="geoDiv" value="6">
 <input type="hidden" name="geoDist" id="geoDist" value="52">
 <input type="hidden" name="geoCity" id="geoCity" value="121">
 <input type="hidden" name="geoUnion" id="geoUnion" value="1356">
-<input type="hidden" name="geoWard" id="geoWard" value="30471">
+<input type="hidden" name="geoWard" id="geoWard" value="">
 <input type="hidden" name="geoArea" id="geoArea" value="">
 <input type="hidden" name="geoLocationId" id="geoLocationId" value="1356">
 <input type="hidden" name="geoCityLevel" id="geoCityLevel" value="3">
@@ -1449,12 +1575,12 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 <input type="hidden" name="geoDistName" id="geoDistName" value="বগুড়া">
 <input type="hidden" name="geoCityName" id="geoCityName" value="সোনাতলা">
 <input type="hidden" name="geoUnionName" id="geoUnionName" value="বালুয়া">
-<input type="hidden" name="geoWardName" id="geoWardName" value="ওয়ার্ড - ১">
+<input type="hidden" name="geoWardName" id="geoWardName" value="">
 <input type="hidden" name="geoDivNameEn" id="geoDivNameEn" value="RAJSHAHI DIVISION">
 <input type="hidden" name="geoDistNameEn" id="geoDistNameEn" value="BOGURA">
 <input type="hidden" name="geoCityNameEn" id="geoCityNameEn" value="SONATOLA">
 <input type="hidden" name="geoUnionNameEn" id="geoUnionNameEn" value="BALUA">
-<input type="hidden" name="geoWardNameEn" id="geoWardNameEn" value="WARD - 1">
+<input type="hidden" name="geoWardNameEn" id="geoWardNameEn" value="">
 </div></section>
 
 <section class="card"><div class="card-head"><span class="num">২</span><h2>শিশুর তথ্য<small>জন্ম সনদের নাম অনুযায়ী</small></h2></div><div class="card-body">
@@ -1470,55 +1596,60 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 </select></label>
 <label class="field"><span>জাতীয় পরিচয়পত্র নম্বর (ঐচ্ছিক)</span><input name="nid" id="nid" inputmode="numeric" maxlength="17"><small class="hint">১৮ বছরের বেশি হলে প্রযোজ্য</small></label>
 </div>
-<div class="notice">পুরো নাম: <strong id="namePreviewBn">—</strong> / <strong id="namePreviewEn">—</strong><br>এক শব্দের নাম হলে প্রথম অংশ খালি রেখে পুরো নাম শেষ অংশে লিখুন। যেমন: <strong>সুরাইয়া</strong> → প্রথম অংশ খালি, শেষ অংশ <strong>সুরাইয়া</strong>।</div>
+<div class="name-preview">পুরো নাম: <strong id="namePreviewBn">—</strong> / <strong id="namePreviewEn">—</strong><span>এক শব্দের নাম হলে প্রথম অংশ খালি রেখে পুরো নাম শেষ অংশে লিখুন।</span></div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৩</span><h2>জন্মস্থান ও ঠিকানা<small>স্থায়ী ও বর্তমান ঠিকানা একই ধর হবে</small></h2></div><div class="card-body">
+<section class="card"><div class="card-head"><span class="num">৩</span><h2>জন্মস্থানের ঠিকানা</h2></div><div class="card-body">
 <div class="grid2">
-<label class="field"><span>গ্রাম / এলাকা (বাংলা) <b>*</b></span><input name="birthPlaceVilAreaTownBn" id="birthPlaceVilAreaTownBn" required></label>
-<label class="field"><span>গ্রাম / এলাকা (English) <b>*</b></span><input name="birthPlaceVilAreaTownEn" id="birthPlaceVilAreaTownEn" required></label>
-<label class="field"><span>ডাকঘর (বাংলা) <b>*</b></span><input name="birthPlacePostOfc" id="birthPlacePostOfc" required></label>
-<label class="field"><span>ডাকঘর (English) <b>*</b></span><input name="birthPlacePostOfcEn" id="birthPlacePostOfcEn" required></label>
-<label class="field"><span>বাড়ি / রাস্তা (বাংলা, ঐচ্ছিক)</span><input name="birthPlaceHouseRoadBn" id="birthPlaceHouseRoadBn"></label>
-<label class="field"><span>বাড়ি / রাস্তা (English, ঐচ্ছিক)</span><input name="birthPlaceHouseRoadEn" id="birthPlaceHouseRoadEn"></label>
-<label class="field"><span>পোস্ট কোড <b>*</b></span><input name="birthPlacePostCode" id="birthPlacePostCode" inputmode="numeric" maxlength="4" required></label>
-<label class="field"><span>জন্মস্থান (বাংলা)</span><input id="addrPreviewBn" readonly placeholder="গ্রাম, ডাকঘর"></label>
+<label class="field"><span>দেশ <b>*</b></span><select id="birthPlaceCountry" disabled><option value="1" data-level="0" data-name-en="BANGLADESH" selected>বাংলাদেশ</option></select></label>
+<label class="field"><span>বিভাগ <b>*</b></span><select id="birthPlaceDiv" disabled><option value="6" data-level="1" data-name-en="RAJSHAHI DIVISION" selected>রাজশাহী বিভাগ</option></select></label>
+<label class="field"><span>জেলা <b>*</b></span><select id="birthPlaceDist" disabled><option value="52" data-level="2" data-name-en="BOGURA" selected>বগুড়া</option></select></label>
+<label class="field"><span>সিটি কর্পোরেশন,ক্যান্টনমেন্ট/উপজেলা <b>*</b></span><select id="birthPlaceCityCorpCantOrUpazila" disabled><option value="121" data-level="3" data-name-en="SONATOLA" selected>সোনাতলা</option></select></label>
+<label class="field geo-union-row"><span>পৌরসভা/ইউনিয়ন <b>*</b></span><select id="birthPlacePaurasavaOrUnion" disabled><option value="1356" data-level="5" data-name-en="BALUA" selected>বালুয়া</option></select></label>
+<label class="field geo-ward-row"><span>ওয়ার্ড <b>*</b></span><select id="birthPlaceWardInPaurasavaOrUnion" required><option value="">ওয়ার্ড নির্বাচন করুন</option><option value="30471" data-ward="1" data-name-en="Ward - 1">ওয়ার্ড - 1</option><option value="30472" data-ward="2" data-name-en="Ward - 2">ওয়ার্ড - 2</option><option value="30473" data-ward="3" data-name-en="Ward - 3">ওয়ার্ড - 3</option><option value="30474" data-ward="4" data-name-en="Ward - 4">ওয়ার্ড - 4</option><option value="30475" data-ward="5" data-name-en="Ward - 5">ওয়ার্ড - 5</option><option value="30476" data-ward="6" data-name-en="Ward - 6">ওয়ার্ড - 6</option><option value="30477" data-ward="7" data-name-en="Ward - 7">ওয়ার্ড - 7</option><option value="30478" data-ward="8" data-name-en="Ward - 8">ওয়ার্ড - 8</option><option value="30479" data-ward="9" data-name-en="Ward - 9">ওয়ার্ড - 9</option></select></label>
+<label class="field"><span>ডাকঘর (বাংলায়) <b>*</b></span><input id="birthPlacePostOfc" value="বালুয়াহাট ৫৮২৬" disabled><input type="hidden" name="birthPlacePostOfc" value="বালুয়াহাট ৫৮২৬"></label>
+<label class="field"><span>ডাকঘর (ইংরেজিতে) <b>*</b></span><input id="birthPlacePostOfcEn" value="Baluahat -5826" disabled><input type="hidden" name="birthPlacePostOfcEn" value="Baluahat -5826"></label>
+<label class="field"><span>গ্রাম/পাড়া/মহল্লা <b>*</b></span><input id="birthPlaceVilAreaTownBn" value="ডাকঘরঃ" disabled><input type="hidden" name="birthPlaceVilAreaTownBn" value="ডাকঘরঃ"></label>
+<label class="field"><span>গ্রাম/পাড়া/মহল্লা (ইংরেজি) <b>*</b></span><input id="birthPlaceVilAreaTownEn" value="Post:" disabled><input type="hidden" name="birthPlaceVilAreaTownEn" value="Post:"></label>
+<label class="field span2"><span>গ্রাম/এলাকা নির্বাচন</span><select id="voterArea" disabled><option value="">আগে ওয়ার্ড নির্বাচন করুন</option></select><small class="hint">ওয়ার্ড নির্বাচন করলে এলাকার তালিকা আসবে; এলাকা নির্বাচন করলে বাসা ও সড়ক ঘরে নাম বসবে।</small></label>
+<label class="field"><span>বাসা ও সড়ক (নাম, নম্বর)</span><input name="birthPlaceHouseRoadBn" id="birthPlaceHouseRoadBn" value="গ্রামঃ "></label>
+<label class="field"><span>বাসা ও সড়ক (নাম, নম্বর) (ইংরেজি)</span><input name="birthPlaceHouseRoadEn" id="birthPlaceHouseRoadEn" value="Village: "></label>
 </div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৪</span><h2>পিতা-মাতার তথ্য<small>নাম বাংলা ও ইংরেজিতে দিন</small></h2></div><div class="card-body">
-<div class="grid2">
-<label class="field"><span>পিতার প্রথম অংশ (বাংলা)</span><input name="fatherFirstBn" id="fatherFirstBn"><small class="hint">এক শব্দের নাম হলে খালি রাখুন</small></label>
-<label class="field"><span>পিতার শেষ অংশ (বাংলা) <b>*</b></span><input name="fatherLastBn" id="fatherLastBn" required></label>
-<label class="field"><span>Father first name (English)</span><input name="fatherFirstEn" id="fatherFirstEn"><small class="hint">Leave blank for a single-word name</small></label>
-<label class="field"><span>Father last name (English) <b>*</b></span><input name="fatherLastEn" id="fatherLastEn" required></label>
-<label class="field"><span>মাতার প্রথম অংশ (বাংলা)</span><input name="motherFirstBn" id="motherFirstBn"><small class="hint">এক শব্দের নাম হলে খালি রাখুন</small></label>
-<label class="field"><span>মাতার শেষ অংশ (বাংলা) <b>*</b></span><input name="motherLastBn" id="motherLastBn" required></label>
-<label class="field"><span>Mother first name (English)</span><input name="motherFirstEn" id="motherFirstEn"><small class="hint">Leave blank for a single-word name</small></label>
-<label class="field"><span>Mother last name (English) <b>*</b></span><input name="motherLastEn" id="motherLastEn" required></label>
-<label class="field"><span>পিতার জন্ম তারিখ (ঐচ্ছিক)</span><input name="fatherDob" id="fatherDob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"></label>
-<label class="field"><span>মাতার জন্ম তারিখ (ঐচ্ছিক)</span><input name="motherDob" id="motherDob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"></label>
-<label class="field"><span>পিতার জন্ম নিবন্ধন নম্বর (ঐচ্ছিক)</span><input name="fatherUbrn" id="fatherUbrn" inputmode="numeric" maxlength="17"></label>
-<label class="field"><span>মাতার জন্ম নিবন্ধন নম্বর (ঐচ্ছিক)</span><input name="motherUbrn" id="motherUbrn" inputmode="numeric" maxlength="17"></label>
-<label class="field"><span>পিতার পাসপোর্ট (ঐচ্ছিক)</span><input name="fatherPassport" id="fatherPassport" maxlength="20"></label>
-<label class="field"><span>মাতার পাসপোর্ট (ঐচ্ছিক)</span><input name="motherPassport" id="motherPassport" maxlength="20"></label>
+<div class="parent-pair">
+<section class="card"><div class="card-head"><span class="num">৪</span><h2>পিতার তথ্য<small>নাম বাংলা ও ইংরেজিতে দিন</small></h2></div><div class="card-body">
+<div class="grid2 parent-verify-fields" style="margin-bottom:16px">
+<label class="field"><span>জন্ম নিবন্ধন নম্বর (ঐচ্ছিক)</span><input name="fatherUbrn" id="fatherUbrn" inputmode="numeric" maxlength="17"></label>
+<label class="field"><span>জন্ম তারিখ (ঐচ্ছিক)</span><input name="fatherDob" id="fatherDob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"></label>
 </div>
-<div class="notice">নাগরিকত্ব: বাংলাদেশী (ডিফল্ট)। ২০১৩ সালের আগে জন্ম হলে পিতা-মাতার জন্ম নিবন্ধন নম্বর বাধ্যতামূলক নয়।</div>
+<label class="field"><span>পিতার নাম (বাংলা) <b>*</b></span><input name="fatherNameBn" id="fatherNameBn" required></label>
+<div class="field" style="margin-top:16px"><span>পিতার নাম (English) <b>*</b></span><div class="input-group"><input name="fatherNameEn" id="fatherNameEn" aria-label="পিতার নাম (English)" required><button type="button" class="btn btn-ghost verify-btn hidden" id="fatherVerifyBtn" data-type="father">যাচাই</button></div></div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৫</span><h2>আবেদনকারী<small>আবেদন কে করছেন</small></h2></div><div class="card-body">
-<div class="grid2">
-<label class="field"><span>সম্পর্ক <b>*</b></span><select name="relationWithApplicant" id="relationWithApplicant" required><option value="SELF">নিজে (SELF)</option><option value="FATHER">পিতা</option><option value="MOTHER">মাতা</option><option value="GRANDFATHER">দাদা</option><option value="GRANDMOTHER">দাদি</option><option value="MATERNALGRANDFATHER">নানা</option><option value="MATERNALGRANDMOTHER">নানি</option><option value="GUARDIAN">অভিভাবক</option><option value="OTHERS">অন্যান্য</option></select></label>
-<label class="field"><span>আবেদনকারীর নাম (English) <b>*</b></span><input name="applicantName" id="applicantName" readonly required></label>
+<section class="card"><div class="card-head"><span class="num">৫</span><h2>মাতার তথ্য<small>নাম বাংলা ও ইংরেজিতে দিন</small></h2></div><div class="card-body">
+<div class="grid2 parent-verify-fields" style="margin-bottom:16px">
+<label class="field"><span>জন্ম নিবন্ধন নম্বর (ঐচ্ছিক)</span><input name="motherUbrn" id="motherUbrn" inputmode="numeric" maxlength="17"></label>
+<label class="field"><span>জন্ম তারিখ (ঐচ্ছিক)</span><input name="motherDob" id="motherDob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"></label>
 </div>
-<div class="grid2 hidden" id="applicantExtra">
-<label class="field"><span>আবেদনকারীর জন্ম নিবন্ধন নম্বর</span><input name="applicantBrn" id="applicantBrn" inputmode="numeric" maxlength="17"></label>
-<label class="field"><span>আবেদনকারীর জন্ম তারিখ</span><input name="applicantDob" id="applicantDob" placeholder="DD/MM/YYYY" inputmode="numeric" maxlength="10"></label>
+<label class="field"><span>মাতার নাম (বাংলা) <b>*</b></span><input name="motherNameBn" id="motherNameBn" required></label>
+<div class="field" style="margin-top:16px"><span>মাতার নাম (English) <b>*</b></span><div class="input-group"><input name="motherNameEn" id="motherNameEn" aria-label="মাতার নাম (English)" required><button type="button" class="btn btn-ghost verify-btn hidden" id="motherVerifyBtn" data-type="mother">যাচাই</button></div></div>
+</div></section>
+</div>
+
+<section class="card"><div class="card-head"><span class="num">৬</span><h2>আবেদনকারী<small>আবেদন কে করছেন</small></h2></div><div class="card-body">
+<div class="grid2">
+<label class="field"><span>সম্পর্ক <b>*</b></span><select id="relationWithApplicant" disabled><option value="OTHERS" selected>অন্যান্য</option></select><input type="hidden" name="relationWithApplicant" value="OTHERS"></label>
+<label class="field"><span>আবেদনকারীর নাম (English) <b>*</b></span><input name="applicantName" id="applicantName" value="Md Abdullah Al Emon" readonly required></label>
+</div>
+<div class="grid2" id="applicantExtra">
+<label class="field"><span>আবেদনকারীর জন্ম নিবন্ধন নম্বর</span><input name="applicantBrn" id="applicantBrn" value="20041019510113908" readonly></label>
+<label class="field"><span>আবেদনকারীর জন্ম তারিখ</span><input name="applicantDob" id="applicantDob" value="18/01/2004" readonly></label>
 <label class="field"><span>আবেদনকারীর NID (ঐচ্ছিক)</span><input name="applicantNotParentsNid" id="applicantNotParentsNid" inputmode="numeric" maxlength="17"></label>
 </div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৬</span><h2>সংযুক্তি<small>জন্ম তারিখ অনুযায়ী প্রয়োজনীয় কাগজ</small></h2></div><div class="card-body">
+<section class="card"><div class="card-head"><span class="num">৭</span><h2>সংযুক্তি<small>জন্ম তারিখ অনুযায়ী প্রয়োজনীয় কাগজ</small></h2></div><div class="card-body">
 <div class="uploader"><label class="field type-select"><span>সংযুক্তির ধরন <b>*</b></span><select id="attachmentType"><option value="">আগে জন্ম তারিখ দিন</option></select></label><div><button type="button" class="btn btn-main" id="uploadBtn">আপলোড</button></div></div>
 <input type="file" id="fileInput" accept="image/jpeg,image/png,application/pdf" class="hidden">
 <div class="hint">JPG, PNG বা PDF · সর্বোচ্চ ৫ মেগাবাইট · প্রতিটি ধরনের জন্য আলাদা ফাইল</div>
@@ -1526,7 +1657,7 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 <div class="files" id="fileList"></div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৭</span><h2>মোবাইল যাচাই<small>ওটিপি কোড দিয়ে আবেদন নিশ্চিত করুন</small></h2></div><div class="card-body">
+<section class="card"><div class="card-head"><span class="num">৮</span><h2>মোবাইল যাচাই<small>ওটিপি কোড দিয়ে আবেদন নিশ্চিত করুন</small></h2></div><div class="card-body">
 <div class="grid2">
 <label class="field"><span>মোবাইল নম্বর <b>*</b></span><input name="phone" id="phone" placeholder="01XXXXXXXXX" inputmode="tel" maxlength="14" required><small class="hint">একই নম্বরে বারবার আবেদন করা যাবে</small></label>
 <label class="field"><span>ইমেইল (ঐচ্ছিক)</span><input name="email" id="email" type="email" maxlength="120"></label>
@@ -1539,19 +1670,12 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 <div class="status" id="verifyStatus"><span>মোবাইল যাচাই</span><b>হয়নি</b></div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৮</span><h2>ঘোষণা ও জমা<small>তথ্য সঠিক থাকলে জমা দিন</small></h2></div><div class="card-body">
-<label style="display:flex;gap:10px;align-items:flex-start;font-size:13px"><input type="checkbox" name="declaration" id="declaration" required style="width:18px;height:18px;margin-top:2px;flex:0 0 auto"><span>আমি ঘোষণা করছি যে প্রদত্ত তথ্য সত্য এবং সঠিক। ভুল তথ্য দিলে আবেদন বাতিল হতে পারে।</span></label>
+<section class="card"><div class="card-head"><span class="num">৯</span><h2>ঘোষণা ও জমা<small>তথ্য সঠিক থাকলে জমা দিন</small></h2></div><div class="card-body">
+<label class="declaration"><input type="checkbox" name="declaration" id="declaration" required><span>আমি ঘোষণা করছি যে প্রদত্ত তথ্য সত্য এবং সঠিক। ভুল তথ্য দিলে আবেদন বাতিল হতে পারে।</span></label>
 <div class="actions"><button type="submit" class="btn btn-main" id="submitBtn" disabled>আবেদন জমা দিন</button><span class="hint" id="submitHint">আগে মোবাইল নম্বর যাচাই করুন</span></div>
 </div></section>
 </form>
-</div>
-
-<aside class="side">
-<div class="card"><div class="card-head"><span class="num">i</span><h2>আবেদনের ধাপ<small>শুরু থেকে শেষ</small></h2></div><div class="card-body"><ol class="steps"><li class="on"><span class="dot">১</span><span>কার্যালয় ও জন্মস্থান নির্বাচন</span></li><li><span class="dot">২</span><span>শিশু ও পিতা-মাতার তথ্য</span></li><li><span class="dot">৩</span><span>সংযুক্তি আপলোড</span></li><li><span class="dot">৪</span><span>মোবাইল ওটিপি যাচাই</span></li><li><span class="dot">৫</span><span>আবেদন জমা ও নম্বর সংরক্ষণ</span></li></ol>
-<div class="notice">জমা দেওয়ার পর আবেদনপত্র নম্বরটি সংরক্ষণ করুন। প্রিন্ট কপি ও কাগজপত্র নিবন্ধক কার্যালয়ে জমা দিতে হবে।</div></div></div>
-<div class="card"><div class="card-head"><span class="num">?</span><h2>সাহায্য<small>সাধারণ নির্দেশনা</small></h2></div><div class="card-body" style="font-size:12px;color:var(--muted)"><p style="margin:0 0 8px">নাম বাংলা ও ইংরেজিতে আলাদা ঘরে লিখুন। জন্ম তারিখ DD/MM/YYYY format-এ দিন।</p><p style="margin:0 0 8px">জন্মস্থানের বিভাগ, জেলা, উপজেলা, ইউনিয়ন ও ওয়ার্ড নির্বাচন করুন। ডিফল্ট কার্যালয় বালুয়া ইউনিয়ন পরিষদ।</p><p style="margin:0">ফাইল আপলোড করার পর প্রতিটি ধরনের জন্য আলাদা সংযুক্তি যোগ করুন।</p></div></div>
-</aside>
-</div></main>
+</main>
 
 <script>
 const initialAttachments=<?php echo $ffAttachJson !== false ? $ffAttachJson : '[]'; ?>;
@@ -1565,10 +1689,19 @@ function val(id){const e=document.getElementById(id);return e?String(e.value||''
 function enDigits(v){return String(v||'').replace(/[০-৯]/g,function(d){return String('০১২৩৪৫৬৭৮৯'.indexOf(d))})}
 function fullName(a,b){return (val(a)+' '+val(b)).trim()}
 function updateNames(){const bn=fullName('personFirstBn','personLastBn');const en=fullName('personFirstEn','personLastEn');$('#namePreviewBn').textContent=bn||'—';$('#namePreviewEn').textContent=en||'—';syncApplicant()}
-function syncApplicant(){const rel=val('relationWithApplicant');const el=$('#applicantName');const extra=$('#applicantExtra');if(rel==='SELF'){el.value=fullName('personFirstEn','personLastEn');el.readOnly=true;extra.classList.add('hidden')}else if(rel==='FATHER'){el.value=fullName('fatherFirstEn','fatherLastEn');el.readOnly=true;extra.classList.remove('hidden')}else if(rel==='MOTHER'){el.value=fullName('motherFirstEn','motherLastEn');el.readOnly=true;extra.classList.remove('hidden')}else{el.readOnly=false;extra.classList.remove('hidden')}}
-['personFirstBn','personLastBn','personFirstEn','personLastEn','fatherFirstBn','fatherLastBn','fatherFirstEn','fatherLastEn','motherFirstBn','motherLastBn','motherFirstEn','motherLastEn'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('input',updateNames)});
+function syncApplicant(){const rel=val('relationWithApplicant');const el=$('#applicantName');const extra=$('#applicantExtra');if(rel==='SELF'){el.value=fullName('personFirstEn','personLastEn');el.readOnly=true;extra.classList.add('hidden')}else if(rel==='FATHER'){el.value=val('fatherNameEn');el.readOnly=true;extra.classList.remove('hidden')}else if(rel==='MOTHER'){el.value=val('motherNameEn');el.readOnly=true;extra.classList.remove('hidden')}else if(rel==='OTHERS'){el.readOnly=true;extra.classList.remove('hidden')}else{el.readOnly=false;extra.classList.remove('hidden')}}
+['personFirstBn','personLastBn','personFirstEn','personLastEn','fatherNameBn','fatherNameEn','motherNameBn','motherNameEn'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('input',updateNames)});
 if($('#relationWithApplicant'))$('#relationWithApplicant').addEventListener('change',syncApplicant);
 ['dob','fatherDob','motherDob','applicantDob'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('blur',function(){const d=enDigits(e.value).replace(/\D/g,'');if(d.length===8){e.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4)}else{e.value=String(e.value).replace(/[^0-9\/০-৯]/g,'')}})});
+function dobValue(id){const d=enDigits(val(id));return /^\d{2}\/\d{2}\/\d{4}$/.test(d)?d:''}
+function parentVerifyAllowed(){const d=dobValue('dob');if(!d)return false;return Number(d.split('/')[2])>=2013}
+function toggleVerifyButtons(){const on=parentVerifyAllowed();$$('.verify-btn').forEach(function(b){b.classList.toggle('hidden',!on);b.disabled=!on});$$('.parent-verify-fields').forEach(function(box){box.classList.toggle('hidden',!on);Array.prototype.forEach.call(box.querySelectorAll('input'),function(inp){inp.disabled=!on})})}
+function resetVerifyButton(type){const b=document.getElementById(type+'VerifyBtn');if(!b)return;b.classList.remove('is-done');b.textContent='যাচাই'}
+async function verifyParent(btn){const type=btn.dataset.type==='mother'?'mother':'father';const label=type==='father'?'পিতার':'মাতার';const ubrn=enDigits(val(type+'Ubrn')).replace(/\D/g,'');const dob=dobValue(type+'Dob');const nameEn=val(type+'NameEn');const childDob=dobValue('dob');if(!parentVerifyAllowed()){toast('শিশুর জন্ম তারিখ ২০১৩ বা পরে হলে যাচাই করা যাবে',true);return}if(ubrn.length!==17){toast('১৭ ডিজিটের জন্ম নিবন্ধন নম্বর দিন',true);return}if(!dob){toast(label+' জন্ম তারিখ DD/MM/YYYY আকারে দিন',true);return}if(!nameEn){toast(label+' নাম ইংরেজিতে দিন',true);return}resetVerifyButton(type);setBusy(btn,true);let done=false;try{const j=await post('parent_info',{type:type,ubrn:ubrn,dob:dob,nameEn:nameEn,childDob:childDob});if(j.nameBn)document.getElementById(type+'NameBn').value=j.nameBn;if(j.nameEn)document.getElementById(type+'NameEn').value=j.nameEn;updateNames();toast(j.message||label+' তথ্য যাচাই হয়েছে');done=true}catch(e){toast(e.message,true)}finally{setBusy(btn,false);if(done){btn.textContent='যাচাই হয়েছে';btn.classList.add('is-done')}}}
+$$('.verify-btn').forEach(function(btn){btn.addEventListener('click',function(){verifyParent(btn)})});
+['fatherUbrn','fatherDob','fatherNameEn','motherUbrn','motherDob','motherNameEn'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('input',function(){resetVerifyButton(id.indexOf('father')===0?'father':'mother')})});
+$('#dob').addEventListener('input',toggleVerifyButtons);
+toggleVerifyButtons();
 </script>
 
 <script>
@@ -1589,18 +1722,51 @@ async function onDivision(){const v=Number(val('birthPlaceDiv'));setHidden('div'
 async function onDistrict(){const v=Number(val('birthPlaceDist'));setHidden('dist',v);setHidden('city',0);setHidden('union',0);setHidden('ward',0);setHidden('area',0);setHidden('locationId',0);clearSelect($('#birthPlaceCityCorpCantOrUpazila'),'উপজেলা / সিটি নির্বাচন করুন');clearSelect($('#birthPlacePaurasavaOrUnion'),'ইউনিয়ন / পৌরসভা নির্বাচন করুন');clearSelect($('#birthPlaceWardInPaurasavaOrUnion'),'ওয়ার্ড নির্বাচন করুন');if(v>0)await loadGeo(v,3,3,false,$('#birthPlaceCityCorpCantOrUpazila'),'উপজেলা / সিটি নির্বাচন করুন')}
 async function onCity(){const el=$('#birthPlaceCityCorpCantOrUpazila');const v=Number(val('birthPlaceCityCorpCantOrUpazila'));const lvl=selectedLevel(el);setHidden('city',v);setHidden('cityLevel',lvl);setHidden('union',0);setHidden('ward',0);setHidden('area',0);setHidden('locationId',0);const unionRow=document.querySelector('.geo-union-row');const wardRow=document.querySelector('.geo-ward-row');clearSelect($('#birthPlacePaurasavaOrUnion'),'ইউনিয়ন / পৌরসভা নির্বাচন করুন');clearSelect($('#birthPlaceWardInPaurasavaOrUnion'),'ওয়ার্ড নির্বাচন করুন');if(v<=0)return;if(lvl===3){unionRow.classList.remove('hidden');wardRow.classList.remove('hidden');setHidden('wardKind','union');$('#birthPlacePaurasavaOrUnion').disabled=false;await loadGeo(v,4,5,false,$('#birthPlacePaurasavaOrUnion'),'ইউনিয়ন / পৌরসভা নির্বাচন করুন')}else if(lvl===4||lvl===5){unionRow.classList.remove('hidden');wardRow.classList.remove('hidden');setHidden('wardKind','union');const opt=el.options[el.selectedIndex];const u=$('#birthPlacePaurasavaOrUnion');u.innerHTML='';const o=document.createElement('option');o.value=String(v);o.textContent=opt.textContent;o.dataset.nameEn=opt.dataset.nameEn||'';u.appendChild(o);setHidden('union',v);setHidden('locationId',v);await loadGeo(v,4,lvl,true,$('#birthPlaceWardInPaurasavaOrUnion'),'ওয়ার্ড নির্বাচন করুন')}else if(lvl===7){unionRow.classList.add('hidden');wardRow.classList.add('hidden');setHidden('wardKind','city');setHidden('locationId',v)}else if(lvl===8){unionRow.classList.add('hidden');wardRow.classList.add('hidden');setHidden('wardKind','city');setHidden('locationId',v)}else{unionRow.classList.remove('hidden');wardRow.classList.remove('hidden');setHidden('wardKind','union');await loadGeo(v,4,5,false,$('#birthPlacePaurasavaOrUnion'),'ইউনিয়ন / পৌরসভা নির্বাচন করুন')}}
 async function onUnion(){const v=Number(val('birthPlacePaurasavaOrUnion'));setHidden('union',v);setHidden('locationId',v);setHidden('ward',0);clearSelect($('#birthPlaceWardInPaurasavaOrUnion'),'ওয়ার্ড নির্বাচন করুন');if(v>0){const lvl=Number(val('geoCityLevel'))||3;await loadGeo(v,4,lvl===4?4:5,true,$('#birthPlaceWardInPaurasavaOrUnion'),'ওয়ার্ড নির্বাচন করুন')}}
+const voterAreas=[
+{id:'101866',bn:'বাগবাড়ী',en:'Bagbari',ward:1},
+{id:'101867',bn:'কুশারঘোপ',en:'Kusharghop',ward:1},
+{id:'101868',bn:'চক সৈয়দপুর',en:'Chak Sayedpur',ward:1},
+{id:'101869',bn:'জনার্দনপুর',en:'Jonardanpur',ward:1},
+{id:'101870',bn:'পুরকায়েত',en:'Purkayet',ward:1},
+{id:'101871',bn:'মোকন্দপুর',en:'Mokondopur',ward:1},
+{id:'101872',bn:'রাখালগাছী',en:'Rakhalgachi',ward:1},
+{id:'101873',bn:'গবারপাড়া',en:'Gobarpara',ward:3},
+{id:'101874',bn:'ছোট বালুয়া',en:'Choto Balua',ward:3},
+{id:'101875',bn:'দীঘিরপাড়া',en:'Dighirpara',ward:2},
+{id:'101876',bn:'আগাবরগাছা, দাউদপুর, কর্ণীপাড়া',en:'Agaborgacha, Daudpur, Kornipara',ward:2},
+{id:'101877',bn:'উত্তর আটকরিয়া',en:'Uttor Atkoria',ward:4},
+{id:'101878',bn:'ঝিনারপাড়া',en:'Jhinarpara',ward:4},
+{id:'101879',bn:'দক্ষিণ আটকরিয়া',en:'Dokkhin Atkoria',ward:5},
+{id:'101880',bn:'বামুনিয়া',en:'Bamunia',ward:5},
+{id:'101881',bn:'উত্তর দিঘলকান্দি',en:'Uttor Digholkandi',ward:6},
+{id:'101882',bn:'বালুয়াপাড়া',en:'Baluapara',ward:6},
+{id:'101883',bn:'হাড়িয়াকান্দি',en:'Hariakandi',ward:6},
+{id:'101884',bn:'পাতিলাকুড়া',en:'Patilakura',ward:7},
+{id:'101885',bn:'রশিদপুর',en:'Roshidpur',ward:7},
+{id:'101886',bn:'রশিনাবাড়ী',en:'Roshinabari',ward:7},
+{id:'101887',bn:'ধর্মকুল',en:'Dhormokul',ward:8},
+{id:'101888',bn:'পুগলিয়া',en:'Puglia',ward:8},
+{id:'101889',bn:'মহিষাবাড়ী',en:'Mohishabari',ward:8},
+{id:'101890',bn:'নগরপাড়া',en:'Nogorpara',ward:9},
+{id:'101891',bn:'বড় বালুয়া',en:'Boro Balua',ward:9},
+{id:'101892',bn:'সমজাতাইড়',en:'Somjatair',ward:9}
+];
+function selectedWardNo(){const s=$('#birthPlaceWardInPaurasavaOrUnion');const o=s&&s.options[s.selectedIndex];return o&&o.value?Number(o.dataset.ward||0):0}
+function resetVoterAreaFields(){const bn=$('#birthPlaceHouseRoadBn');const en=$('#birthPlaceHouseRoadEn');if(bn)bn.value='গ্রামঃ ';if(en)en.value='Village: ';const s=$('#voterArea');if(s)s.dataset.applied=''}
+function fillVoterAreas(){const s=$('#voterArea');if(!s)return;const w=selectedWardNo();clearSelect(s,w?'এলাকা নির্বাচন করুন':'আগে ওয়ার্ড নির্বাচন করুন');s.disabled=!w;if(!w)return;voterAreas.filter(function(a){return a.ward===w}).forEach(function(a){const o=document.createElement('option');o.value=a.id;o.textContent=a.bn;o.dataset.bn=a.bn;o.dataset.en=a.en;s.appendChild(o)})}
+function onWardVoterChange(){const s=$('#voterArea');if(s&&s.dataset.applied==='1')resetVoterAreaFields();fillVoterAreas()}
+function applyVoterArea(){const s=$('#voterArea');const o=s&&s.options[s.selectedIndex];if(!o||!o.value){if(s&&s.dataset.applied==='1')resetVoterAreaFields();return}const bn=$('#birthPlaceHouseRoadBn');const en=$('#birthPlaceHouseRoadEn');if(bn)bn.value='গ্রামঃ '+o.dataset.bn;if(en)en.value='Village: '+o.dataset.en;s.dataset.applied='1'}
 $('#birthPlaceDiv').addEventListener('change',onDivision);
 $('#birthPlaceDist').addEventListener('change',onDistrict);
 $('#birthPlaceCityCorpCantOrUpazila').addEventListener('change',onCity);
 $('#birthPlacePaurasavaOrUnion').addEventListener('change',onUnion);
 $('#birthPlaceWardInPaurasavaOrUnion').addEventListener('change',function(){setHidden('ward',Number(val('birthPlaceWardInPaurasavaOrUnion')))});
+$('#birthPlaceWardInPaurasavaOrUnion').addEventListener('change',onWardVoterChange);
+$('#voterArea').addEventListener('change',applyVoterArea);
 ['birthPlaceDiv','birthPlaceDist','birthPlaceCityCorpCantOrUpazila','birthPlacePaurasavaOrUnion','birthPlaceWardInPaurasavaOrUnion'].forEach(function(id){const el=document.getElementById(id);if(el)el.addEventListener('change',function(){setTimeout(syncGeoNames,0)})});
 
-function addrPreview(){const a=(val('birthPlaceHouseRoadBn')+' '+val('birthPlaceVilAreaTownBn')+' '+val('birthPlacePostOfc')).replace(/\s+/g,' ').trim();$('#addrPreviewBn').value=a}
-['birthPlaceHouseRoadBn','birthPlaceVilAreaTownBn','birthPlacePostOfc'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('input',addrPreview)});
-
 function setBusy(btn,on){if(!btn)return;btn.disabled=on;if(on){btn.dataset.old=btn.textContent;btn.textContent='অপেক্ষা করুন…'}else if(btn.dataset.old){btn.textContent=btn.dataset.old}}
-function otpNames(){return {'personInfoForBirth.personNameBn':fullName('personFirstBn','personLastBn'),'personInfoForBirth.personNameEn':fullName('personFirstEn','personLastEn'),'personInfoForBirth.father.personNameBn':fullName('fatherFirstBn','fatherLastBn'),'personInfoForBirth.father.personNameEn':fullName('fatherFirstEn','fatherLastEn'),'personInfoForBirth.mother.personNameBn':fullName('motherFirstBn','motherLastBn'),'personInfoForBirth.mother.personNameEn':fullName('motherFirstEn','motherLastEn')}}
+function otpNames(){return {'personInfoForBirth.personNameBn':fullName('personFirstBn','personLastBn'),'personInfoForBirth.personNameEn':fullName('personFirstEn','personLastEn'),'personInfoForBirth.father.personNameBn':val('fatherNameBn'),'personInfoForBirth.father.personNameEn':val('fatherNameEn'),'personInfoForBirth.mother.personNameBn':val('motherNameBn'),'personInfoForBirth.mother.personNameEn':val('motherNameEn')}}
 function otpPayload(){return {phone:val('phone'),email:val('email'),relation:val('relationWithApplicant'),applicantName:val('applicantName'),applicantBrn:val('applicantBrn'),applicantDob:val('applicantDob'),officeAddressType:'BIRTHPLACE',geoLocationId:Number(val('geoLocationId')),names:otpNames()}}
 let verified=false;
 let verifiedPhone='';
@@ -1615,6 +1781,7 @@ const appForm=$('#appForm');
 appForm.addEventListener('submit',function(e){if(!verified){e.preventDefault();toast('আগে মোবাইল নম্বর যাচাই করুন',true);return}if(verifiedPhone&&verifiedPhone!==enDigits(val('phone')).replace(/\D/g,'')){e.preventDefault();toast('নম্বর বদলেছে, আবার ওটিপি যাচাই করুন',true);return}if(!uploaded.length){e.preventDefault();toast('প্রয়োজনীয় সংযুক্তি দিন',true);return}const sel=$('#attachmentType');const ids=Array.from(sel.options).filter(function(o){return o.value}).map(function(o){return Number(o.value)});const have=uploaded.map(function(a){return Number(a.type)});if(ids.some(function(id){return have.indexOf(id)<0})){e.preventDefault();toast('প্রতিটি প্রয়োজনীয় সংযুক্তি যোগ করুন',true);return}if(!appForm.checkValidity()){e.preventDefault();appForm.reportValidity();return}const b=$('#submitBtn');b.disabled=true;b.textContent='জমা হচ্ছে…';});
 
 syncGeoNames();
+fillVoterAreas();
 renderFiles();
 updateTypeHint();
 if(val('dob'))loadTypes();
