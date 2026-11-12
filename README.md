@@ -10,7 +10,6 @@ A standalone PHP form for submitting birth registration applications to the BDRI
 - Parent UBRN/DOB fields and verify buttons shown only when the child's DOB is 01/01/2013 or later
 - Attachment type detection by date of birth and file upload
 - OTP send and verify flow
-- Applicant section prefilled for the OTHERS relation
 - Local success page with the full application summary and print/PDF action
 - No database; state and cookies are stored in a per-session cache directory
 
@@ -68,7 +67,7 @@ define('FF_CACHE', __DIR__ . '/cache/');
 
 1. Fill in the child's details. The parent UBRN/DOB fields appear only for a child born on or after 01/01/2013.
 2. Select a ward (1–9), then choose a voter area; the house/road fields fill with the area name and remain editable.
-3. Complete the parent names and review the prefilled applicant details.
+3. Complete the parent names.
 4. Upload the required attachments.
 5. Send and verify the mobile OTP.
 6. Submit the application.

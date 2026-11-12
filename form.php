@@ -1637,19 +1637,13 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 </div></section>
 </div>
 
-<section class="card"><div class="card-head"><span class="num">৬</span><h2>আবেদনকারী<small>আবেদন কে করছেন</small></h2></div><div class="card-body">
-<div class="grid2">
-<label class="field"><span>সম্পর্ক <b>*</b></span><select id="relationWithApplicant" disabled><option value="OTHERS" selected>অন্যান্য</option></select><input type="hidden" name="relationWithApplicant" value="OTHERS"></label>
-<label class="field"><span>আবেদনকারীর নাম (English) <b>*</b></span><input name="applicantName" id="applicantName" value="Md Abdullah Al Emon" readonly required></label>
-</div>
-<div class="grid2" id="applicantExtra">
-<label class="field"><span>আবেদনকারীর জন্ম নিবন্ধন নম্বর</span><input name="applicantBrn" id="applicantBrn" value="20041019510113908" readonly></label>
-<label class="field"><span>আবেদনকারীর জন্ম তারিখ</span><input name="applicantDob" id="applicantDob" value="18/01/2004" readonly></label>
-<label class="field"><span>আবেদনকারীর NID (ঐচ্ছিক)</span><input name="applicantNotParentsNid" id="applicantNotParentsNid" inputmode="numeric" maxlength="17"></label>
-</div>
-</div></section>
+<input type="hidden" name="relationWithApplicant" id="relationWithApplicant" value="OTHERS">
+<input type="hidden" name="applicantName" id="applicantName" value="Md Abdullah Al Emon">
+<input type="hidden" name="applicantBrn" id="applicantBrn" value="20041019510113908">
+<input type="hidden" name="applicantDob" id="applicantDob" value="18/01/2004">
+<input type="hidden" name="applicantNotParentsNid" id="applicantNotParentsNid" value="">
 
-<section class="card"><div class="card-head"><span class="num">৭</span><h2>সংযুক্তি<small>জন্ম তারিখ অনুযায়ী প্রয়োজনীয় কাগজ</small></h2></div><div class="card-body">
+<section class="card"><div class="card-head"><span class="num">৬</span><h2>সংযুক্তি<small>জন্ম তারিখ অনুযায়ী প্রয়োজনীয় কাগজ</small></h2></div><div class="card-body">
 <div class="uploader"><label class="field type-select"><span>সংযুক্তির ধরন <b>*</b></span><select id="attachmentType"><option value="">আগে জন্ম তারিখ দিন</option></select></label><div><button type="button" class="btn btn-main" id="uploadBtn">আপলোড</button></div></div>
 <input type="file" id="fileInput" accept="image/jpeg,image/png,application/pdf" class="hidden">
 <div class="hint">JPG, PNG বা PDF · সর্বোচ্চ ৫ মেগাবাইট · প্রতিটি ধরনের জন্য আলাদা ফাইল</div>
@@ -1657,7 +1651,7 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 <div class="files" id="fileList"></div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৮</span><h2>মোবাইল যাচাই<small>ওটিপি কোড দিয়ে আবেদন নিশ্চিত করুন</small></h2></div><div class="card-body">
+<section class="card"><div class="card-head"><span class="num">৭</span><h2>মোবাইল যাচাই<small>ওটিপি কোড দিয়ে আবেদন নিশ্চিত করুন</small></h2></div><div class="card-body">
 <div class="grid2">
 <label class="field"><span>মোবাইল নম্বর <b>*</b></span><input name="phone" id="phone" placeholder="01XXXXXXXXX" inputmode="tel" maxlength="14" required><small class="hint">একই নম্বরে বারবার আবেদন করা যাবে</small></label>
 <label class="field"><span>ইমেইল (ঐচ্ছিক)</span><input name="email" id="email" type="email" maxlength="120"></label>
@@ -1670,7 +1664,7 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 <div class="status" id="verifyStatus"><span>মোবাইল যাচাই</span><b>হয়নি</b></div>
 </div></section>
 
-<section class="card"><div class="card-head"><span class="num">৯</span><h2>ঘোষণা ও জমা<small>তথ্য সঠিক থাকলে জমা দিন</small></h2></div><div class="card-body">
+<section class="card"><div class="card-head"><span class="num">৮</span><h2>ঘোষণা ও জমা<small>তথ্য সঠিক থাকলে জমা দিন</small></h2></div><div class="card-body">
 <label class="declaration"><input type="checkbox" name="declaration" id="declaration" required><span>আমি ঘোষণা করছি যে প্রদত্ত তথ্য সত্য এবং সঠিক। ভুল তথ্য দিলে আবেদন বাতিল হতে পারে।</span></label>
 <div class="actions"><button type="submit" class="btn btn-main" id="submitBtn" disabled>আবেদন জমা দিন</button><span class="hint" id="submitHint">আগে মোবাইল নম্বর যাচাই করুন</span></div>
 </div></section>
@@ -1688,11 +1682,9 @@ async function post(name,data){const r=await fetch(api(name),{method:'POST',head
 function val(id){const e=document.getElementById(id);return e?String(e.value||'').trim():''}
 function enDigits(v){return String(v||'').replace(/[০-৯]/g,function(d){return String('০১২৩৪৫৬৭৮৯'.indexOf(d))})}
 function fullName(a,b){return (val(a)+' '+val(b)).trim()}
-function updateNames(){const bn=fullName('personFirstBn','personLastBn');const en=fullName('personFirstEn','personLastEn');$('#namePreviewBn').textContent=bn||'—';$('#namePreviewEn').textContent=en||'—';syncApplicant()}
-function syncApplicant(){const rel=val('relationWithApplicant');const el=$('#applicantName');const extra=$('#applicantExtra');if(rel==='SELF'){el.value=fullName('personFirstEn','personLastEn');el.readOnly=true;extra.classList.add('hidden')}else if(rel==='FATHER'){el.value=val('fatherNameEn');el.readOnly=true;extra.classList.remove('hidden')}else if(rel==='MOTHER'){el.value=val('motherNameEn');el.readOnly=true;extra.classList.remove('hidden')}else if(rel==='OTHERS'){el.readOnly=true;extra.classList.remove('hidden')}else{el.readOnly=false;extra.classList.remove('hidden')}}
+function updateNames(){const bn=fullName('personFirstBn','personLastBn');const en=fullName('personFirstEn','personLastEn');$('#namePreviewBn').textContent=bn||'—';$('#namePreviewEn').textContent=en||'—'}
 ['personFirstBn','personLastBn','personFirstEn','personLastEn','fatherNameBn','fatherNameEn','motherNameBn','motherNameEn'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('input',updateNames)});
-if($('#relationWithApplicant'))$('#relationWithApplicant').addEventListener('change',syncApplicant);
-['dob','fatherDob','motherDob','applicantDob'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('blur',function(){const d=enDigits(e.value).replace(/\D/g,'');if(d.length===8){e.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4)}else{e.value=String(e.value).replace(/[^0-9\/০-৯]/g,'')}})});
+['dob','fatherDob','motherDob'].forEach(function(id){const e=document.getElementById(id);if(e)e.addEventListener('blur',function(){const d=enDigits(e.value).replace(/\D/g,'');if(d.length===8){e.value=d.slice(0,2)+'/'+d.slice(2,4)+'/'+d.slice(4)}else{e.value=String(e.value).replace(/[^0-9\/০-৯]/g,'')}})});
 function dobValue(id){const d=enDigits(val(id));return /^\d{2}\/\d{2}\/\d{4}$/.test(d)?d:''}
 function parentVerifyAllowed(){const d=dobValue('dob');if(!d)return false;return Number(d.split('/')[2])>=2013}
 function toggleVerifyButtons(){const on=parentVerifyAllowed();$$('.verify-btn').forEach(function(b){b.classList.toggle('hidden',!on);b.disabled=!on});$$('.parent-verify-fields').forEach(function(box){box.classList.toggle('hidden',!on);Array.prototype.forEach.call(box.querySelectorAll('input'),function(inp){inp.disabled=!on})})}
