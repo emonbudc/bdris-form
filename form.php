@@ -1601,19 +1601,19 @@ ff_page_open('জন্ম নিবন্ধন আবেদন ফর্ম');
 
 <section class="card"><div class="card-head"><span class="num">৩</span><h2>জন্মস্থানের ঠিকানা</h2></div><div class="card-body">
 <div class="grid2">
-<label class="field"><span>দেশ <b>*</b></span><select id="birthPlaceCountry" disabled><option value="1" data-level="0" data-name-en="BANGLADESH" selected>বাংলাদেশ</option></select></label>
-<label class="field"><span>বিভাগ <b>*</b></span><select id="birthPlaceDiv" disabled><option value="6" data-level="1" data-name-en="RAJSHAHI DIVISION" selected>রাজশাহী বিভাগ</option></select></label>
-<label class="field"><span>জেলা <b>*</b></span><select id="birthPlaceDist" disabled><option value="52" data-level="2" data-name-en="BOGURA" selected>বগুড়া</option></select></label>
-<label class="field"><span>সিটি কর্পোরেশন,ক্যান্টনমেন্ট/উপজেলা <b>*</b></span><select id="birthPlaceCityCorpCantOrUpazila" disabled><option value="121" data-level="3" data-name-en="SONATOLA" selected>সোনাতলা</option></select></label>
-<label class="field geo-union-row"><span>পৌরসভা/ইউনিয়ন <b>*</b></span><select id="birthPlacePaurasavaOrUnion" disabled><option value="1356" data-level="5" data-name-en="BALUA" selected>বালুয়া</option></select></label>
+<label class="field hidden"><span>দেশ <b>*</b></span><select id="birthPlaceCountry" disabled><option value="1" data-level="0" data-name-en="BANGLADESH" selected>বাংলাদেশ</option></select></label>
+<label class="field hidden"><span>বিভাগ <b>*</b></span><select id="birthPlaceDiv" disabled><option value="6" data-level="1" data-name-en="RAJSHAHI DIVISION" selected>রাজশাহী বিভাগ</option></select></label>
+<label class="field hidden"><span>জেলা <b>*</b></span><select id="birthPlaceDist" disabled><option value="52" data-level="2" data-name-en="BOGURA" selected>বগুড়া</option></select></label>
+<label class="field hidden"><span>সিটি কর্পোরেশন,ক্যান্টনমেন্ট/উপজেলা <b>*</b></span><select id="birthPlaceCityCorpCantOrUpazila" disabled><option value="121" data-level="3" data-name-en="SONATOLA" selected>সোনাতলা</option></select></label>
+<label class="field geo-union-row hidden"><span>পৌরসভা/ইউনিয়ন <b>*</b></span><select id="birthPlacePaurasavaOrUnion" disabled><option value="1356" data-level="5" data-name-en="BALUA" selected>বালুয়া</option></select></label>
 <label class="field geo-ward-row"><span>ওয়ার্ড <b>*</b></span><select id="birthPlaceWardInPaurasavaOrUnion" required><option value="">ওয়ার্ড নির্বাচন করুন</option><option value="30471" data-ward="1" data-name-en="Ward - 1">ওয়ার্ড - 1</option><option value="30472" data-ward="2" data-name-en="Ward - 2">ওয়ার্ড - 2</option><option value="30473" data-ward="3" data-name-en="Ward - 3">ওয়ার্ড - 3</option><option value="30474" data-ward="4" data-name-en="Ward - 4">ওয়ার্ড - 4</option><option value="30475" data-ward="5" data-name-en="Ward - 5">ওয়ার্ড - 5</option><option value="30476" data-ward="6" data-name-en="Ward - 6">ওয়ার্ড - 6</option><option value="30477" data-ward="7" data-name-en="Ward - 7">ওয়ার্ড - 7</option><option value="30478" data-ward="8" data-name-en="Ward - 8">ওয়ার্ড - 8</option><option value="30479" data-ward="9" data-name-en="Ward - 9">ওয়ার্ড - 9</option></select></label>
-<label class="field"><span>ডাকঘর (বাংলায়) <b>*</b></span><input id="birthPlacePostOfc" value="বালুয়াহাট ৫৮২৬" disabled><input type="hidden" name="birthPlacePostOfc" value="বালুয়াহাট ৫৮২৬"></label>
-<label class="field"><span>ডাকঘর (ইংরেজিতে) <b>*</b></span><input id="birthPlacePostOfcEn" value="Baluahat -5826" disabled><input type="hidden" name="birthPlacePostOfcEn" value="Baluahat -5826"></label>
-<label class="field"><span>গ্রাম/পাড়া/মহল্লা <b>*</b></span><input id="birthPlaceVilAreaTownBn" value="ডাকঘরঃ" disabled><input type="hidden" name="birthPlaceVilAreaTownBn" value="ডাকঘরঃ"></label>
-<label class="field"><span>গ্রাম/পাড়া/মহল্লা (ইংরেজি) <b>*</b></span><input id="birthPlaceVilAreaTownEn" value="Post:" disabled><input type="hidden" name="birthPlaceVilAreaTownEn" value="Post:"></label>
-<label class="field span2"><span>গ্রাম/এলাকা নির্বাচন</span><select id="voterArea" disabled><option value="">আগে ওয়ার্ড নির্বাচন করুন</option></select><small class="hint">ওয়ার্ড নির্বাচন করলে এলাকার তালিকা আসবে; এলাকা নির্বাচন করলে বাসা ও সড়ক ঘরে নাম বসবে।</small></label>
-<label class="field"><span>বাসা ও সড়ক (নাম, নম্বর)</span><input name="birthPlaceHouseRoadBn" id="birthPlaceHouseRoadBn" value="গ্রামঃ "></label>
-<label class="field"><span>বাসা ও সড়ক (নাম, নম্বর) (ইংরেজি)</span><input name="birthPlaceHouseRoadEn" id="birthPlaceHouseRoadEn" value="Village: "></label>
+<label class="field hidden"><span>ডাকঘর (বাংলায়) <b>*</b></span><input id="birthPlacePostOfc" value="বালুয়াহাট ৫৮২৬" disabled><input type="hidden" name="birthPlacePostOfc" value="বালুয়াহাট ৫৮২৬"></label>
+<label class="field hidden"><span>ডাকঘর (ইংরেজিতে) <b>*</b></span><input id="birthPlacePostOfcEn" value="Baluahat -5826" disabled><input type="hidden" name="birthPlacePostOfcEn" value="Baluahat -5826"></label>
+<label class="field hidden"><span>গ্রাম/পাড়া/মহল্লা <b>*</b></span><input id="birthPlaceVilAreaTownBn" value="ডাকঘরঃ" disabled><input type="hidden" name="birthPlaceVilAreaTownBn" value="ডাকঘরঃ"></label>
+<label class="field hidden"><span>গ্রাম/পাড়া/মহল্লা (ইংরেজি) <b>*</b></span><input id="birthPlaceVilAreaTownEn" value="Post:" disabled><input type="hidden" name="birthPlaceVilAreaTownEn" value="Post:"></label>
+<label class="field"><span>গ্রাম/এলাকা নির্বাচন</span><select id="voterArea" disabled><option value="">আগে ওয়ার্ড নির্বাচন করুন</option></select><small class="hint">ওয়ার্ড নির্বাচন করলে এলাকার তালিকা আসবে।</small></label>
+<label class="field hidden"><span>বাসা ও সড়ক (নাম, নম্বর)</span><input name="birthPlaceHouseRoadBn" id="birthPlaceHouseRoadBn" value="গ্রামঃ "></label>
+<label class="field hidden"><span>বাসা ও সড়ক (নাম, নম্বর) (ইংরেজি)</span><input name="birthPlaceHouseRoadEn" id="birthPlaceHouseRoadEn" value="Village: "></label>
 </div>
 </div></section>
 

@@ -6,7 +6,7 @@ A standalone PHP form for submitting birth registration applications to the BDRI
 
 - Bengali single-page form with a live Bengali/English name preview
 - Birth-place address chain preconfigured for Balua Union (Rajshahi → Bogura → Sonatola → Balua)
-- Ward 1–9 selector and a ward-filtered voter-area dropdown that fills the house/road fields
+- Ward 1–9 and village/area selectors; fixed address fields are submitted automatically
 - Parent UBRN/DOB fields and verify buttons shown only when the child's DOB is 01/01/2013 or later
 - Attachment type detection by date of birth and file upload
 - OTP send and verify flow
@@ -19,9 +19,9 @@ A standalone PHP form for submitting birth registration applications to the BDRI
 
 ![Child details](screenshots/child-details.png)
 
-### Birth-place address and voter area
+### Birth-place address: ward and village/area
 
-![Birth-place address and voter area](screenshots/address-voter.png)
+![Ward and village area selectors](screenshots/address-voter.png)
 
 ### Parent information (child DOB 01/01/2013 or later)
 
@@ -66,7 +66,7 @@ define('FF_CACHE', __DIR__ . '/cache/');
 ## Usage
 
 1. Fill in the child's details. The parent UBRN/DOB fields appear only for a child born on or after 01/01/2013.
-2. Select a ward (1–9), then choose a voter area; the house/road fields fill with the area name and remain editable.
+2. Select a ward (1–9), then choose a village/area.
 3. Complete the parent names.
 4. Upload the required attachments.
 5. Send and verify the mobile OTP.
@@ -83,7 +83,7 @@ Father and mother names are entered as a single full name in each language.
 
 ## Notes
 
-- The form is preconfigured for Balua Union; the division, district, upazila, union and post office fields are fixed.
+- The form is preconfigured for Balua Union; the division, district, upazila, union and post office fields are fixed and submitted automatically.
 - Ward numbers and voter-area names are stored in `form.php`.
 - The cache directory stores session state and upstream cookies. Keep it outside the public web root or deny direct HTTP access to it.
 - Serve the form over HTTPS in production.
